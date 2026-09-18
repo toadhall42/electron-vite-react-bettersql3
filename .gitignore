@@ -14,6 +14,7 @@ dist-electron
 *.local
 .env
 __database
+migrations
 
 # Editor directories and files
 .vscode/*
