@@ -9,6 +9,8 @@ const links = [
   { to: "/drivertable", label: "Driver Table" },
   { to: "/vehicleinput", label: "Vehicle Input" },
   { to: "/vehicletable", label: "Vehicle Table" },
+  { to: "/entrantinput", label: "Entrant Input" },
+  { to: "/entranttable", label: "Entrant Table" },
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];

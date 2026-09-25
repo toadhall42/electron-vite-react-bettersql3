@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as DriverInputRouteImport } from './routes/driverInput'
 import { Route as DriverTableRouteImport } from './routes/driverTable'
+import { Route as EntrantInputRouteImport } from './routes/entrantInput'
+import { Route as EntrantTableRouteImport } from './routes/entrantTable'
 import { Route as FsRouteImport } from './routes/fs'
 import { Route as TableRouteImport } from './routes/table'
 import { Route as VehicleInputRouteImport } from './routes/vehicleInput'
@@ -36,6 +38,16 @@ const DriverInputRoute = DriverInputRouteImport.update({
 const DriverTableRoute = DriverTableRouteImport.update({
   id: '/driverTable',
   path: '/driverTable',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrantInputRoute = EntrantInputRouteImport.update({
+  id: '/entrantInput',
+  path: '/entrantInput',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrantTableRoute = EntrantTableRouteImport.update({
+  id: '/entrantTable',
+  path: '/entrantTable',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FsRoute = FsRouteImport.update({
@@ -64,6 +76,8 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/driverInput': typeof DriverInputRoute
   '/driverTable': typeof DriverTableRoute
+  '/entrantInput': typeof EntrantInputRoute
+  '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
   '/vehicleInput': typeof VehicleInputRoute
@@ -74,6 +88,8 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/driverInput': typeof DriverInputRoute
   '/driverTable': typeof DriverTableRoute
+  '/entrantInput': typeof EntrantInputRoute
+  '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
   '/vehicleInput': typeof VehicleInputRoute
@@ -85,6 +101,8 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/driverInput': typeof DriverInputRoute
   '/driverTable': typeof DriverTableRoute
+  '/entrantInput': typeof EntrantInputRoute
+  '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
   '/vehicleInput': typeof VehicleInputRoute
@@ -97,6 +115,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/driverInput'
     | '/driverTable'
+    | '/entrantInput'
+    | '/entrantTable'
     | '/fs'
     | '/table'
     | '/vehicleInput'
@@ -107,6 +127,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/driverInput'
     | '/driverTable'
+    | '/entrantInput'
+    | '/entrantTable'
     | '/fs'
     | '/table'
     | '/vehicleInput'
@@ -117,6 +139,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/driverInput'
     | '/driverTable'
+    | '/entrantInput'
+    | '/entrantTable'
     | '/fs'
     | '/table'
     | '/vehicleInput'
@@ -128,6 +152,8 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   DriverInputRoute: typeof DriverInputRoute
   DriverTableRoute: typeof DriverTableRoute
+  EntrantInputRoute: typeof EntrantInputRoute
+  EntrantTableRoute: typeof EntrantTableRoute
   FsRoute: typeof FsRoute
   TableRoute: typeof TableRoute
   VehicleInputRoute: typeof VehicleInputRoute
@@ -162,6 +188,20 @@ declare module '@tanstack/react-router' {
       path: '/driverTable'
       fullPath: '/driverTable'
       preLoaderRoute: typeof DriverTableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrantInput': {
+      id: '/entrantInput'
+      path: '/entrantInput'
+      fullPath: '/entrantInput'
+      preLoaderRoute: typeof EntrantInputRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrantTable': {
+      id: '/entrantTable'
+      path: '/entrantTable'
+      fullPath: '/entrantTable'
+      preLoaderRoute: typeof EntrantTableRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fs': {
@@ -200,6 +240,8 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   DriverInputRoute: DriverInputRoute,
   DriverTableRoute: DriverTableRoute,
+  EntrantInputRoute: EntrantInputRoute,
+  EntrantTableRoute: EntrantTableRoute,
   FsRoute: FsRoute,
   TableRoute: TableRoute,
   VehicleInputRoute: VehicleInputRoute,

@@ -30,6 +30,13 @@ export type {
   UpdateVehicle,
 } from "./electron/main/db/schema/vehicles";
 
+export type {
+  Entrant,
+  InsertEntrant,
+  UpdateEntrant,
+  EntrantWithDetails,
+} from "./electron/main/db/schema/entrants";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;
