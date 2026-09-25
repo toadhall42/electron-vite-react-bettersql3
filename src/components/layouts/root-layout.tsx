@@ -3,13 +3,9 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import logo from "@assets/crow.png";
 
 const links = [
-  { to: "/", label: "Form", exact: true },
-  { to: "/table", label: "Table" },
-  { to: "/drivertable", label: "Drivers" },
-  { to: "/vehicleinput", label: "Vehicle Input" },
-  { to: "/vehicletable", label: "Vehicle Table" },
-  { to: "/entrantinput", label: "Entrant Input" },
-  { to: "/entranttable", label: "Entrant Table" },
+  { to: "/driverTable", label: "Drivers" },
+  { to: "/vehicleTable", label: "Vehicles" },
+  { to: "/entrantTable", label: "Entrants" },
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];
@@ -28,11 +24,10 @@ export function RootLayout() {
         </div>
 
         {/* Nav */}
-        {links.map(({ to, label, exact }) => (
+        {links.map(({ to, label }) => (
           <Link
             key={to}
             to={to}
-            activeOptions={exact ? { exact: true } : undefined}
             className="text-xs tracking-wide px-2 py-2 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900 transition-colors"
             activeProps={{
               className:

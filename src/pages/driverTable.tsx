@@ -29,7 +29,7 @@ function fmtActive(value: unknown): string {
 export function DriverTablePage() {
   const [data, setData] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Partial<Driver>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });

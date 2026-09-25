@@ -13,12 +13,6 @@ export interface FsService {
 }
 
 export type {
-  Product,
-  InsertProduct,
-  UpdateProduct,
-} from "./electron/main/db/schema/products";
-
-export type {
   Driver,
   InsertDriver,
   UpdateDriver,
