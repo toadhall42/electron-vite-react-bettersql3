@@ -24,6 +24,12 @@ export type {
   UpdateDriver,
 } from "./electron/main/db/schema/drivers";
 
+export type {
+  Vehicle,
+  InsertVehicle,
+  UpdateVehicle,
+} from "./electron/main/db/schema/vehicles";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;
