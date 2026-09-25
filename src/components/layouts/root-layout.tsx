@@ -1,6 +1,6 @@
 import { Outlet, Link } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import logo from "@assets/crow.png";
+import logo from "@assets/race-car.svg";
 
 const links = [
   { to: "/driverTable", label: "Drivers" },
@@ -19,7 +19,7 @@ export function RootLayout() {
         <div className="flex items-center gap-2 px-2 mb-6">
           <img src={logo} className="w-5 h-5" />
           <span className="text-xs font-semibold tracking-widest uppercase text-white">
-            Testlab
+            Track Notes
           </span>
         </div>
 

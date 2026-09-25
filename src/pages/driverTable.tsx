@@ -70,7 +70,11 @@ export function DriverTablePage() {
 
   async function create() {
     setSaving(true);
-    await addDriver(newRow as InsertDriver);
+    const row = {
+      ...newRow,
+      name: newRow.name.trim() || `${newRow.firstname} ${newRow.lastname}`.trim(),
+    };
+    await addDriver(row as InsertDriver);
     setNewRow({ ...EMPTY_NEW });
     await load();
     setSaving(false);
