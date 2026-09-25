@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as DriverInputRouteImport } from './routes/driverInput'
+import { Route as DriverTableRouteImport } from './routes/driverTable'
 import { Route as FsRouteImport } from './routes/fs'
 import { Route as TableRouteImport } from './routes/table'
 
@@ -22,6 +24,16 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverInputRoute = DriverInputRouteImport.update({
+  id: '/driverInput',
+  path: '/driverInput',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverTableRoute = DriverTableRouteImport.update({
+  id: '/driverTable',
+  path: '/driverTable',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FsRoute = FsRouteImport.update({
@@ -38,12 +50,16 @@ const TableRoute = TableRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/driverInput': typeof DriverInputRoute
+  '/driverTable': typeof DriverTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/driverInput': typeof DriverInputRoute
+  '/driverTable': typeof DriverTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
 }
@@ -51,20 +67,31 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/driverInput': typeof DriverInputRoute
+  '/driverTable': typeof DriverTableRoute
   '/fs': typeof FsRoute
   '/table': typeof TableRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/fs' | '/table'
+  fullPaths: '/' | '/about' | '/driverInput' | '/driverTable' | '/fs' | '/table'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/fs' | '/table'
-  id: '__root__' | '/' | '/about' | '/fs' | '/table'
+  to: '/' | '/about' | '/driverInput' | '/driverTable' | '/fs' | '/table'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/driverInput'
+    | '/driverTable'
+    | '/fs'
+    | '/table'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  DriverInputRoute: typeof DriverInputRoute
+  DriverTableRoute: typeof DriverTableRoute
   FsRoute: typeof FsRoute
   TableRoute: typeof TableRoute
 }
@@ -83,6 +110,20 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driverInput': {
+      id: '/driverInput'
+      path: '/driverInput'
+      fullPath: '/driverInput'
+      preLoaderRoute: typeof DriverInputRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driverTable': {
+      id: '/driverTable'
+      path: '/driverTable'
+      fullPath: '/driverTable'
+      preLoaderRoute: typeof DriverTableRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fs': {
@@ -105,6 +146,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  DriverInputRoute: DriverInputRoute,
+  DriverTableRoute: DriverTableRoute,
   FsRoute: FsRoute,
   TableRoute: TableRoute,
 }

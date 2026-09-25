@@ -5,6 +5,8 @@ import logo from "@assets/crow.png";
 const links = [
   { to: "/", label: "Form", exact: true },
   { to: "/table", label: "Table" },
+  { to: "/driverinput", label: "Driver Input" },
+  { to: "/drivertable", label: "Driver Table" },
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];

@@ -18,6 +18,12 @@ export type {
   UpdateProduct,
 } from "./electron/main/db/schema/products";
 
+export type {
+  Driver,
+  InsertDriver,
+  UpdateDriver,
+} from "./electron/main/db/schema/drivers";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;
