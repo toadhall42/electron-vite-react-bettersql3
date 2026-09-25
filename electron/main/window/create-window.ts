@@ -17,8 +17,8 @@ let tray: Tray;
 
 export const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 600,
+    width: 2000,
+    height: 1000,
     center: true,
     icon: iconPath,
     titleBarStyle: "default", // "hidden"

@@ -35,7 +35,7 @@ export function DriverTablePage() {
         <Btn onClick={load}>Refresh</Btn>
       </div>
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[60px_1fr_120px_80px] px-4 py-2 border-b border-neutral-800">
+        <div className="grid grid-cols-[60px_1fr_120px_120px_80px_80px] px-4 py-2 border-b border-neutral-800">
           <span className="text-[10px] uppercase tracking-widest text-neutral-600">
             ID
           </span>
@@ -68,13 +68,19 @@ export function DriverTablePage() {
           drivers.map((d) => (
             <div
               key={d.id}
-              className="grid grid-cols-[60px_1fr_120px_80px] px-4 py-3 border-b border-neutral-800/40 last:border-0 hover:bg-neutral-900/40 transition-colors items-center"
+              className="grid grid-cols-[60px_1fr_120px_120px_80px_80px] px-4 py-3 border-b border-neutral-800/40 last:border-0 hover:bg-neutral-900/40 transition-colors items-center"
             >
               <span className="text-neutral-600 text-xs">{d.id}</span>
               <span className="text-neutral-200 text-xs">{d.name}</span>
               <span className="text-neutral-400 text-xs">{d.firstname}</span>
               <span className="text-neutral-400 text-xs">{d.lastname}</span>
-              <span className="text-neutral-400 text-xs">{d.active}</span>
+              <span className="text-neutral-400 text-xs">
+                {d.active === true || (d.active as unknown) === 1
+                  ? "Yes"
+                  : d.active === false || (d.active as unknown) === 0
+                  ? "No"
+                  : "—"}
+              </span>
               <Btn danger onClick={() => remove(d.id)}>
                 Delete
               </Btn>
