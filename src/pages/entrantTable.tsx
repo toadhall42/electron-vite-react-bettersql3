@@ -104,7 +104,7 @@ export function EntrantTablePage() {
         col.accessor("id", {
           header: "ID",
           cell: (info) => (
-            <span className="text-neutral-600 text-xs">{info.getValue()}</span>
+            <span className="text-gray-400 text-xs">{info.getValue()}</span>
           ),
         }),
         col.display({
@@ -124,7 +124,7 @@ export function EntrantTablePage() {
                 ))}
               </Sel>
             ) : (
-              <span className="text-neutral-200 text-xs truncate">
+              <span className="text-gray-800 text-xs truncate">
                 {info.row.original.driverName ?? "—"}
               </span>
             ),
@@ -148,7 +148,7 @@ export function EntrantTablePage() {
                 ))}
               </Sel>
             ) : (
-              <span className="text-neutral-400 text-xs truncate">
+              <span className="text-gray-500 text-xs truncate">
                 {info.row.original.vehicleMake
                   ? `${info.row.original.vehicleMake} ${info.row.original.vehicleModel} (${info.row.original.vehicleYear})`
                   : "—"}
@@ -164,7 +164,7 @@ export function EntrantTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, number: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("defaulttire", {
@@ -176,7 +176,7 @@ export function EntrantTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, defaulttire: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("active", {
@@ -189,10 +189,10 @@ export function EntrantTablePage() {
                 onChange={(e) =>
                   setEditValues((v) => ({ ...v, active: e.target.checked ? 1 : 0 }))
                 }
-                className="w-4 h-4 accent-neutral-400 cursor-pointer"
+                className="w-4 h-4 accent-gray-600 cursor-pointer"
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{fmtActive(info.getValue())}</span>
+              <span className="text-gray-500 text-xs">{fmtActive(info.getValue())}</span>
             ),
         }),
         col.accessor("notes", {
@@ -204,7 +204,7 @@ export function EntrantTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, notes: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs truncate">{info.getValue() ?? ""}</span>
+              <span className="text-gray-500 text-xs truncate">{info.getValue() ?? ""}</span>
             ),
         }),
         col.accessor("master", {
@@ -217,10 +217,10 @@ export function EntrantTablePage() {
                 onChange={(e) =>
                   setEditValues((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))
                 }
-                className="w-4 h-4 accent-neutral-400 cursor-pointer"
+                className="w-4 h-4 accent-gray-600 cursor-pointer"
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{fmtActive(info.getValue())}</span>
+              <span className="text-gray-500 text-xs">{fmtActive(info.getValue())}</span>
             ),
         }),
         col.display({
@@ -248,27 +248,27 @@ export function EntrantTablePage() {
   const table = useTable({ features, columns, data });
 
   return (
-    <div className="flex flex-col gap-6 overflow-x-auto">
+    <div className="flex flex-col gap-6 overflow-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] uppercase tracking-widest text-neutral-500 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded">
+          <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
             dev
           </span>
-          <h1 className="text-white text-sm font-semibold tracking-widest uppercase">
+          <h1 className="text-gray-900 text-sm font-semibold tracking-widest uppercase">
             Entrants
           </h1>
         </div>
         <Btn onClick={load}>Refresh</Btn>
       </div>
 
-      <div className="border border-neutral-800 rounded-lg overflow-hidden min-w-[960px]">
+      <div className="border border-gray-200 rounded-lg overflow-hidden min-w-[960px] bg-white">
         {/* Header */}
         {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${GRID} py-2 border-b border-neutral-800`}>
+          <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
             {hg.headers.map((header) => (
               <span
                 key={header.id}
-                className="text-[10px] uppercase tracking-widest text-neutral-600"
+                className="text-[10px] uppercase tracking-widest text-gray-400"
               >
                 <table.FlexRender header={header} />
               </span>
@@ -277,16 +277,16 @@ export function EntrantTablePage() {
         ))}
 
         {loading && (
-          <div className="py-10 text-center text-xs text-neutral-600">Loading...</div>
+          <div className="py-10 text-center text-xs text-gray-400">Loading...</div>
         )}
         {!loading && data.length === 0 && (
-          <div className="py-10 text-center text-xs text-neutral-600">No entrants</div>
+          <div className="py-10 text-center text-xs text-gray-400">No entrants</div>
         )}
         {!loading &&
           table.getRowModel().rows.map((row) => (
             <div
               key={row.id}
-              className={`${GRID} py-3 border-b border-neutral-800/40 last:border-0 hover:bg-neutral-900/40 transition-colors`}
+              className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
             >
               {row.getAllCells().map((cell) => (
                 <div key={cell.id}>
@@ -298,8 +298,8 @@ export function EntrantTablePage() {
 
         {/* Add new row */}
         {!loading && (
-          <div className={`${GRID} py-3 border-t border-neutral-700 bg-neutral-900/30`}>
-            <span className="text-neutral-600 text-[10px] uppercase tracking-widest">new</span>
+          <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
+            <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
             <Sel
               value={newRow.driverid || ""}
               onChange={(e) => setNewRow((v) => ({ ...v, driverid: Number(e.target.value) }))}
@@ -334,7 +334,7 @@ export function EntrantTablePage() {
               type="checkbox"
               checked={newRow.active === 1}
               onChange={(e) => setNewRow((v) => ({ ...v, active: e.target.checked ? 1 : 0 }))}
-              className="w-4 h-4 accent-neutral-400 cursor-pointer"
+              className="w-4 h-4 accent-gray-600 cursor-pointer"
             />
             <Inp
               value={newRow.notes}
@@ -345,7 +345,7 @@ export function EntrantTablePage() {
               type="checkbox"
               checked={newRow.master === 1}
               onChange={(e) => setNewRow((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))}
-              className="w-4 h-4 accent-neutral-400 cursor-pointer"
+              className="w-4 h-4 accent-gray-600 cursor-pointer"
             />
             <Btn onClick={create}>Add</Btn>
           </div>
@@ -353,7 +353,7 @@ export function EntrantTablePage() {
       </div>
 
       {!loading && (
-        <p className="text-[11px] text-neutral-700">{data.length} entrants</p>
+        <p className="text-[11px] text-gray-400">{data.length} entrants</p>
       )}
     </div>
   );

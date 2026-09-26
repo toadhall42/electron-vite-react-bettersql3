@@ -11,11 +11,11 @@ export function Btn({
   return (
     <Button
       onClick={onClick}
-      className={`bg-neutral-900 border rounded-md px-3 py-1.5 text-xs font-mono tracking-wide cursor-pointer transition-colors
+      className={`bg-white border rounded-md px-3 py-1.5 text-xs font-mono tracking-wide cursor-pointer transition-colors
         ${
           danger
-            ? "border-red-900 text-red-500 hover:bg-red-950"
-            : "border-neutral-800 text-neutral-300 hover:bg-neutral-800"
+            ? "border-red-300 text-red-500 hover:bg-red-50"
+            : "border-gray-300 text-gray-700 hover:bg-gray-100"
         }`}
     >
       {children}

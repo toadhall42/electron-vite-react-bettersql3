@@ -12,13 +12,13 @@ const links = [
 
 export function RootLayout() {
   return (
-    <div className="flex h-screen bg-[#0a0a0a] text-neutral-300 font-mono overflow-hidden">
+    <div className="flex h-screen bg-gray-50 text-gray-700 font-mono overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-48 shrink-0 border-r border-neutral-800 flex flex-col py-6 px-4 gap-1">
+      <aside className="w-48 shrink-0 border-r border-gray-200 bg-white flex flex-col py-6 px-4 gap-1">
         {/* Logo */}
         <div className="flex items-center gap-2 px-2 mb-6">
           <img src={logo} className="w-5 h-5" />
-          <span className="text-xs font-semibold tracking-widest uppercase text-white">
+          <span className="text-xs font-semibold tracking-widest uppercase text-gray-900">
             Track Notes
           </span>
         </div>
@@ -28,10 +28,10 @@ export function RootLayout() {
           <Link
             key={to}
             to={to}
-            className="text-xs tracking-wide px-2 py-2 rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900 transition-colors"
+            className="text-xs tracking-wide px-2 py-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
             activeProps={{
               className:
-                "text-xs tracking-wide px-2 py-2 rounded-md bg-neutral-900 text-white hover:bg-neutral-900",
+                "text-xs tracking-wide px-2 py-2 rounded-md bg-gray-100 text-gray-900 hover:bg-gray-100",
             }}
           >
             {label}
@@ -40,14 +40,14 @@ export function RootLayout() {
 
         {/* Bottom */}
         <div className="mt-auto px-2">
-          <div className="text-[10px] text-neutral-700 uppercase tracking-widest">
+          <div className="text-[10px] text-gray-400 uppercase tracking-widest">
             v0.0.1 · dev
           </div>
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 overflow-hidden p-6 flex flex-col">
         <Outlet />
       </main>
 

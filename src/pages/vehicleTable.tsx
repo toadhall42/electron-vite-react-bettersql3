@@ -71,7 +71,7 @@ export function VehicleTablePage() {
         col.accessor("id", {
           header: "ID",
           cell: (info) => (
-            <span className="text-neutral-600 text-xs">{info.getValue()}</span>
+            <span className="text-gray-400 text-xs">{info.getValue()}</span>
           ),
         }),
         col.accessor("make", {
@@ -83,7 +83,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, make: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-200 text-xs">{info.getValue()}</span>
+              <span className="text-gray-800 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("model", {
@@ -95,7 +95,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, model: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("year", {
@@ -107,7 +107,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, year: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("class", {
@@ -119,7 +119,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, class: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
         }),
         col.accessor("transponder", {
@@ -131,7 +131,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, transponder: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue() ?? ""}</span>
+              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
         }),
         col.accessor("chassisid", {
@@ -143,7 +143,7 @@ export function VehicleTablePage() {
                 onChange={(e) => setEditValues((v) => ({ ...v, chassisid: e.target.value }))}
               />
             ) : (
-              <span className="text-neutral-400 text-xs">{info.getValue() ?? ""}</span>
+              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
         }),
         col.display({
@@ -171,27 +171,27 @@ export function VehicleTablePage() {
   const table = useTable({ features, columns, data });
 
   return (
-    <div className="max-w-5xl flex flex-col gap-6">
+    <div className="max-w-5xl flex flex-col gap-6 overflow-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] uppercase tracking-widest text-neutral-500 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded">
+          <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
             dev
           </span>
-          <h1 className="text-white text-sm font-semibold tracking-widest uppercase">
+          <h1 className="text-gray-900 text-sm font-semibold tracking-widest uppercase">
             Vehicles
           </h1>
         </div>
         <Btn onClick={load}>Refresh</Btn>
       </div>
 
-      <div className="border border-neutral-800 rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
         {/* Header */}
         {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${GRID} py-2 border-b border-neutral-800`}>
+          <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
             {hg.headers.map((header) => (
               <span
                 key={header.id}
-                className="text-[10px] uppercase tracking-widest text-neutral-600"
+                className="text-[10px] uppercase tracking-widest text-gray-400"
               >
                 <table.FlexRender header={header} />
               </span>
@@ -200,16 +200,16 @@ export function VehicleTablePage() {
         ))}
 
         {loading && (
-          <div className="py-10 text-center text-xs text-neutral-600">Loading...</div>
+          <div className="py-10 text-center text-xs text-gray-400">Loading...</div>
         )}
         {!loading && data.length === 0 && (
-          <div className="py-10 text-center text-xs text-neutral-600">No vehicles</div>
+          <div className="py-10 text-center text-xs text-gray-400">No vehicles</div>
         )}
         {!loading &&
           table.getRowModel().rows.map((row) => (
             <div
               key={row.id}
-              className={`${GRID} py-3 border-b border-neutral-800/40 last:border-0 hover:bg-neutral-900/40 transition-colors`}
+              className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
             >
               {row.getAllCells().map((cell) => (
                 <div key={cell.id}>
@@ -221,8 +221,8 @@ export function VehicleTablePage() {
 
         {/* Add new row */}
         {!loading && (
-          <div className={`${GRID} py-3 border-t border-neutral-700 bg-neutral-900/30`}>
-            <span className="text-neutral-600 text-[10px] uppercase tracking-widest">new</span>
+          <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
+            <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
             <Inp
               value={newRow.make}
               placeholder="make"
@@ -259,7 +259,7 @@ export function VehicleTablePage() {
       </div>
 
       {!loading && (
-        <p className="text-[11px] text-neutral-700">{data.length} vehicles</p>
+        <p className="text-[11px] text-gray-400">{data.length} vehicles</p>
       )}
     </div>
   );

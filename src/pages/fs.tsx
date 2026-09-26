@@ -16,35 +16,35 @@ export function FsPage() {
     { label: "Stat", action: () => window.api.fs.stat(path) },
   ];
   return (
-    <div className="max-w-2xl flex flex-col gap-6">
+    <div className="max-w-2xl flex flex-col gap-6 overflow-auto">
       <div className="flex items-center gap-3">
-        <span className="text-[10px] uppercase tracking-widest text-neutral-500 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded">
+        <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
           dev
         </span>
-        <h1 className="text-white text-sm font-semibold tracking-widest uppercase">
+        <h1 className="text-gray-900 text-sm font-semibold tracking-widest uppercase">
           FS Test
         </h1>
       </div>
       <div className="flex flex-col gap-2">
-        <label className="text-[10px] uppercase tracking-widest text-neutral-500">
+        <label className="text-[10px] uppercase tracking-widest text-gray-500">
           Path
         </label>
         <input
           value={path}
           onChange={(e) => setPath(e.target.value)}
           placeholder="/some/path/file.txt"
-          className="bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600"
+          className="bg-white border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 outline-none focus:border-gray-500"
         />
       </div>
       <div className="flex flex-col gap-2">
-        <label className="text-[10px] uppercase tracking-widest text-neutral-500">
+        <label className="text-[10px] uppercase tracking-widest text-gray-500">
           Content (for write)
         </label>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={3}
-          className="bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600 resize-none"
+          className="bg-white border border-gray-300 rounded px-3 py-2 text-xs text-gray-800 outline-none focus:border-gray-500 resize-none"
         />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -52,7 +52,7 @@ export function FsPage() {
           <button
             key={label}
             onClick={() => run(action)}
-            className="text-xs px-3 py-2 rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-600 transition-colors"
+            className="text-xs px-3 py-2 rounded bg-white border border-gray-300 text-gray-700 hover:text-gray-900 hover:border-gray-400 transition-colors"
           >
             {label}
           </button>

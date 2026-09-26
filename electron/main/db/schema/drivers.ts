@@ -11,6 +11,7 @@ export const drivers = sqliteTable("drivers", {
   name: text().notNull(),
   firstname: text().notNull(),
   lastname: text().notNull(),
+  suffix: text(),
   active: integer( { mode: 'boolean' }).notNull().default(true)
 });
 
