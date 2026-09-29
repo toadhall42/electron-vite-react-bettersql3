@@ -1,3 +1,7 @@
 export * from "./driver.handler";
 export * from "./vehicle.handler";
 export * from "./entrant.handler";
+export * from "./season.handler";
+export * from "./event.handler";
+export * from "./result.handler";
+export * from "./session.handler";

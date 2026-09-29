@@ -31,6 +31,33 @@ export type {
   EntrantWithDetails,
 } from "./electron/main/db/schema/entrants";
 
+export type {
+  Season,
+  InsertSeason,
+  UpdateSeason,
+} from "./electron/main/db/schema/seasons";
+
+export type {
+  Event,
+  InsertEvent,
+  UpdateEvent,
+  EventWithDetails,
+} from "./electron/main/db/schema/events";
+
+export type {
+  Result,
+  InsertResult,
+  UpdateResult,
+  ResultWithDetails,
+} from "./electron/main/db/schema/results";
+
+export type {
+  Session,
+  InsertSession,
+  UpdateSession,
+  SessionWithDetails,
+} from "./electron/main/db/schema/sessions";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;

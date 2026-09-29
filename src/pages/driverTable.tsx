@@ -9,7 +9,7 @@ import {
   updateDriver,
   deleteDriver,
 } from "@/lib/api/driver";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type Driver, type InsertDriver, type UpdateDriver } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
@@ -31,7 +31,7 @@ export function DriverTablePage() {
   const [loading, setLoading] = useState(true);
   const [, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Driver>>({});
+  const editRef = useRef<Partial<Driver>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
@@ -44,23 +44,23 @@ export function DriverTablePage() {
   useEffect(() => { load(); }, []);
 
   function startEdit(row: Driver) {
+    editRef.current = { ...row };
     setEditingId(row.id);
-    setEditValues({ ...row });
   }
 
   function cancelEdit() {
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
   }
 
   async function saveEdit() {
     if (editingId == null) return;
     setSaving(true);
-    const name = [editValues.firstname, editValues.lastname, editValues.suffix]
-      .filter(Boolean).join(" ").trim();
-    await updateDriver(editingId, { ...editValues, name } as UpdateDriver);
+    const { firstname, lastname, suffix } = editRef.current;
+    const name = [firstname, lastname, suffix].filter(Boolean).join(" ").trim();
+    await updateDriver(editingId, { ...editRef.current, name } as UpdateDriver);
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
     await load();
     setSaving(false);
   }
@@ -80,9 +80,6 @@ export function DriverTablePage() {
     setSaving(false);
   }
 
-  const editActive =
-    editValues.active === true || (editValues.active as unknown) === 1;
-
   const columns = useMemo(
     () =>
       col.columns([
@@ -96,12 +93,8 @@ export function DriverTablePage() {
           header: "First Name",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.firstname ?? ""}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, firstname: e.target.value }))
-                }
-              />
+              <Inp key={`firstname-${editingId}`} defaultValue={editRef.current.firstname ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, firstname: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -110,12 +103,8 @@ export function DriverTablePage() {
           header: "Last Name",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.lastname ?? ""}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, lastname: e.target.value }))
-                }
-              />
+              <Inp key={`lastname-${editingId}`} defaultValue={editRef.current.lastname ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, lastname: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -124,12 +113,8 @@ export function DriverTablePage() {
           header: "Suffix",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.suffix ?? ""}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, suffix: e.target.value }))
-                }
-              />
+              <Inp key={`suffix-${editingId}`} defaultValue={editRef.current.suffix ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, suffix: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
@@ -139,11 +124,10 @@ export function DriverTablePage() {
           cell: (info) =>
             editingId === info.row.original.id ? (
               <input
+                key={`active-${editingId}`}
                 type="checkbox"
-                checked={editActive}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, active: e.target.checked }))
-                }
+                defaultChecked={!!editRef.current.active}
+                onChange={(e) => { editRef.current = { ...editRef.current, active: e.target.checked }; }}
                 className="w-4 h-4 accent-gray-600 cursor-pointer"
               />
             ) : (
@@ -173,7 +157,7 @@ export function DriverTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editValues, editActive]
+    [editingId]
   );
 
   const table = useTable({ features, columns, data });

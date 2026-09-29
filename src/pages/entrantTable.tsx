@@ -11,7 +11,7 @@ import {
 } from "@/lib/api/entrant";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllVehicles } from "@/lib/api/vehicle";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
   type Vehicle,
@@ -42,7 +42,7 @@ export function EntrantTablePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Entrant>>({});
+  const editRef = useRef<Partial<Entrant>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
@@ -61,8 +61,7 @@ export function EntrantTablePage() {
   useEffect(() => { load(); }, []);
 
   function startEdit(row: EntrantWithDetails) {
-    setEditingId(row.id);
-    setEditValues({
+    editRef.current = {
       id: row.id,
       driverid: row.driverid,
       vehicleid: row.vehicleid,
@@ -71,19 +70,20 @@ export function EntrantTablePage() {
       active: row.active,
       notes: row.notes,
       master: row.master,
-    });
+    };
+    setEditingId(row.id);
   }
 
   function cancelEdit() {
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
   }
 
   async function saveEdit() {
     if (editingId == null) return;
-    await updateEntrant(editingId, editValues as UpdateEntrant);
+    await updateEntrant(editingId, editRef.current as UpdateEntrant);
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
     await load();
   }
 
@@ -112,12 +112,8 @@ export function EntrantTablePage() {
           header: "Driver",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Sel
-                value={editValues.driverid ?? ""}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, driverid: Number(e.target.value) }))
-                }
-              >
+              <Sel key={`driverid-${editingId}`} defaultValue={editRef.current.driverid ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, driverid: Number(e.target.value) }; }}>
                 <option value="">— driver —</option>
                 {drivers.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
@@ -134,12 +130,8 @@ export function EntrantTablePage() {
           header: "Vehicle",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Sel
-                value={editValues.vehicleid ?? ""}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, vehicleid: Number(e.target.value) }))
-                }
-              >
+              <Sel key={`vehicleid-${editingId}`} defaultValue={editRef.current.vehicleid ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, vehicleid: Number(e.target.value) }; }}>
                 <option value="">— vehicle —</option>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -159,10 +151,8 @@ export function EntrantTablePage() {
           header: "Number",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.number ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, number: e.target.value }))}
-              />
+              <Inp key={`number-${editingId}`} defaultValue={editRef.current.number ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, number: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -171,10 +161,8 @@ export function EntrantTablePage() {
           header: "Tire",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.defaulttire ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, defaulttire: e.target.value }))}
-              />
+              <Inp key={`defaulttire-${editingId}`} defaultValue={editRef.current.defaulttire ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, defaulttire: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -183,12 +171,9 @@ export function EntrantTablePage() {
           header: "Active",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <input
-                type="checkbox"
-                checked={(editValues.active as unknown) === 1}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, active: e.target.checked ? 1 : 0 }))
-                }
+              <input key={`active-${editingId}`} type="checkbox"
+                defaultChecked={(editRef.current.active as unknown) === 1}
+                onChange={(e) => { editRef.current = { ...editRef.current, active: e.target.checked ? 1 : 0 }; }}
                 className="w-4 h-4 accent-gray-600 cursor-pointer"
               />
             ) : (
@@ -199,10 +184,8 @@ export function EntrantTablePage() {
           header: "Notes",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.notes ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, notes: e.target.value }))}
-              />
+              <Inp key={`notes-${editingId}`} defaultValue={editRef.current.notes ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, notes: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs truncate">{info.getValue() ?? ""}</span>
             ),
@@ -211,12 +194,9 @@ export function EntrantTablePage() {
           header: "Master",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <input
-                type="checkbox"
-                checked={(editValues.master as unknown) === 1}
-                onChange={(e) =>
-                  setEditValues((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))
-                }
+              <input key={`master-${editingId}`} type="checkbox"
+                defaultChecked={(editRef.current.master as unknown) === 1}
+                onChange={(e) => { editRef.current = { ...editRef.current, master: e.target.checked ? 1 : 0 }; }}
                 className="w-4 h-4 accent-gray-600 cursor-pointer"
               />
             ) : (
@@ -242,7 +222,7 @@ export function EntrantTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editValues, drivers, vehicles]
+    [editingId, drivers, vehicles]
   );
 
   const table = useTable({ features, columns, data });

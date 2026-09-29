@@ -9,7 +9,7 @@ import {
   updateVehicle,
   deleteVehicle,
 } from "@/lib/api/vehicle";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type Vehicle, type InsertVehicle, type UpdateVehicle } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
@@ -24,7 +24,7 @@ export function VehicleTablePage() {
   const [data, setData] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Vehicle>>({});
+  const editRef = useRef<Partial<Vehicle>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
@@ -37,20 +37,20 @@ export function VehicleTablePage() {
   useEffect(() => { load(); }, []);
 
   function startEdit(row: Vehicle) {
+    editRef.current = { ...row };
     setEditingId(row.id);
-    setEditValues({ ...row });
   }
 
   function cancelEdit() {
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
   }
 
   async function saveEdit() {
     if (editingId == null) return;
-    await updateVehicle(editingId, editValues as UpdateVehicle);
+    await updateVehicle(editingId, editRef.current as UpdateVehicle);
+    editRef.current = {};
     setEditingId(null);
-    setEditValues({});
     await load();
   }
 
@@ -78,10 +78,8 @@ export function VehicleTablePage() {
           header: "Make",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.make ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, make: e.target.value }))}
-              />
+              <Inp key={`make-${editingId}`} defaultValue={editRef.current.make ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, make: e.target.value }; }} />
             ) : (
               <span className="text-gray-800 text-xs">{info.getValue()}</span>
             ),
@@ -90,10 +88,8 @@ export function VehicleTablePage() {
           header: "Model",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.model ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, model: e.target.value }))}
-              />
+              <Inp key={`model-${editingId}`} defaultValue={editRef.current.model ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, model: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -102,10 +98,8 @@ export function VehicleTablePage() {
           header: "Year",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.year ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, year: e.target.value }))}
-              />
+              <Inp key={`year-${editingId}`} defaultValue={editRef.current.year ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, year: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -114,10 +108,8 @@ export function VehicleTablePage() {
           header: "Class",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.class ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, class: e.target.value }))}
-              />
+              <Inp key={`class-${editingId}`} defaultValue={editRef.current.class ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, class: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -126,10 +118,8 @@ export function VehicleTablePage() {
           header: "Transponder",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.transponder ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, transponder: e.target.value }))}
-              />
+              <Inp key={`transponder-${editingId}`} defaultValue={editRef.current.transponder ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, transponder: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
@@ -138,10 +128,8 @@ export function VehicleTablePage() {
           header: "Chassis ID",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp
-                value={editValues.chassisid ?? ""}
-                onChange={(e) => setEditValues((v) => ({ ...v, chassisid: e.target.value }))}
-              />
+              <Inp key={`chassisid-${editingId}`} defaultValue={editRef.current.chassisid ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, chassisid: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
@@ -165,7 +153,7 @@ export function VehicleTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editValues]
+    [editingId]
   );
 
   const table = useTable({ features, columns, data });
