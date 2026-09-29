@@ -10,6 +10,7 @@ const links = [
   { to: "/eventTable", label: "Events" },
   { to: "/resultTable", label: "Results" },
   { to: "/sessionTable", label: "Sessions" },
+  { to: "/weatherTable", label: "Weather" },
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];

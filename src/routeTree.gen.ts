@@ -19,6 +19,7 @@ import { Route as ResultTableRouteImport } from './routes/resultTable'
 import { Route as SeasonTableRouteImport } from './routes/seasonTable'
 import { Route as SessionTableRouteImport } from './routes/sessionTable'
 import { Route as VehicleTableRouteImport } from './routes/vehicleTable'
+import { Route as WeatherTableRouteImport } from './routes/weatherTable'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +71,11 @@ const VehicleTableRoute = VehicleTableRouteImport.update({
   path: '/vehicleTable',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WeatherTableRoute = WeatherTableRouteImport.update({
+  id: '/weatherTable',
+  path: '/weatherTable',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionTable': typeof SessionTableRoute
   '/vehicleTable': typeof VehicleTableRoute
+  '/weatherTable': typeof WeatherTableRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionTable': typeof SessionTableRoute
   '/vehicleTable': typeof VehicleTableRoute
+  '/weatherTable': typeof WeatherTableRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionTable': typeof SessionTableRoute
   '/vehicleTable': typeof VehicleTableRoute
+  '/weatherTable': typeof WeatherTableRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionTable'
     | '/vehicleTable'
+    | '/weatherTable'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionTable'
     | '/vehicleTable'
+    | '/weatherTable'
   id:
     | '__root__'
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionTable'
     | '/vehicleTable'
+    | '/weatherTable'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   SeasonTableRoute: typeof SeasonTableRoute
   SessionTableRoute: typeof SessionTableRoute
   VehicleTableRoute: typeof VehicleTableRoute
+  WeatherTableRoute: typeof WeatherTableRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VehicleTableRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/weatherTable': {
+      id: '/weatherTable'
+      path: '/weatherTable'
+      fullPath: '/weatherTable'
+      preLoaderRoute: typeof WeatherTableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   SeasonTableRoute: SeasonTableRoute,
   SessionTableRoute: SessionTableRoute,
   VehicleTableRoute: VehicleTableRoute,
+  WeatherTableRoute: WeatherTableRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

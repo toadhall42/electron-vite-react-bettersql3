@@ -5,3 +5,4 @@ export * from "./season.handler";
 export * from "./event.handler";
 export * from "./result.handler";
 export * from "./session.handler";
+export * from "./weather.handler";

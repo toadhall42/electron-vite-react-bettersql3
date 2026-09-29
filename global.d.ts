@@ -58,6 +58,13 @@ export type {
   SessionWithDetails,
 } from "./electron/main/db/schema/sessions";
 
+export type {
+  Weather,
+  InsertWeather,
+  UpdateWeather,
+  WeatherWithDetails,
+} from "./electron/main/db/schema/weather";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;

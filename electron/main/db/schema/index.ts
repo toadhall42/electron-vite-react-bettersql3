@@ -5,3 +5,4 @@ export { seasons } from "./seasons";
 export { events } from "./events";
 export { results } from "./results";
 export { sessions } from "./sessions";
+export { weather } from "./weather";
