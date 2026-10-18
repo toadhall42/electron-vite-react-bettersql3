@@ -76,6 +76,7 @@ export class EntrantService {
         tx.rollback();
         throw new Error("insert failed");
       }
+      return { id: Number(result.lastInsertRowid) };
     });
   }
 }

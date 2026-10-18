@@ -34,3 +34,10 @@ export const updateResult = async (id: number, data: UpdateResult) => {
     params: { id, data },
   });
 };
+
+export const calculateResultsForEvent = async (eventId: number) => {
+  return window.api.db<{ races: number; inserted: number; updated: number }>({
+    path: "db/result/calculateForEvent",
+    params: { eventId },
+  });
+};

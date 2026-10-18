@@ -21,7 +21,7 @@ export const deleteDriver = async (id: number) => {
 };
 
 export const addDriver = async (data: InsertDriver) => {
-  return window.api.db({
+  return window.api.db<{ id: number }>({
     path: "db/driver/add",
     params: data,
   });

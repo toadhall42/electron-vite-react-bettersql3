@@ -9,7 +9,7 @@ import {
 export const entrants = sqliteTable("entrants", {
   id: integer().primaryKey(),
   driverid: integer().notNull(),
-  vehicleid: integer().notNull(),
+  vehicleid: integer(),
   number: text().notNull(),
   defaulttire: text().notNull(),
   active: integer().notNull().default(1),

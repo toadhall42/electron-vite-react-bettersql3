@@ -51,3 +51,12 @@ ipcMain.handle("db/result/update", (_event, arg): QueryResponse => {
     return toErrorResponse(err);
   }
 });
+
+ipcMain.handle("db/result/calculateForEvent", (_event, { eventId }): QueryResponse => {
+  try {
+    return response.ok({ data: ResultService.calculateForEvent(eventId) });
+  } catch (err: unknown) {
+    log.error("[RESULT HANDLER] result/calculateForEvent failed", { eventId, err });
+    return toErrorResponse(err);
+  }
+});

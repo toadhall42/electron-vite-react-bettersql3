@@ -228,8 +228,8 @@ export function EntrantTablePage() {
   const table = useTable({ features, columns, data });
 
   return (
-    <div className="flex flex-col gap-6 overflow-auto">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6 h-full overflow-hidden">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
             dev
@@ -241,99 +241,101 @@ export function EntrantTablePage() {
         <Btn onClick={load}>Refresh</Btn>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden min-w-[960px] bg-white">
-        {/* Header */}
-        {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
-            {hg.headers.map((header) => (
-              <span
-                key={header.id}
-                className="text-[10px] uppercase tracking-widest text-gray-400"
-              >
-                <table.FlexRender header={header} />
-              </span>
-            ))}
-          </div>
-        ))}
-
-        {loading && (
-          <div className="py-10 text-center text-xs text-gray-400">Loading...</div>
-        )}
-        {!loading && data.length === 0 && (
-          <div className="py-10 text-center text-xs text-gray-400">No entrants</div>
-        )}
-        {!loading &&
-          table.getRowModel().rows.map((row) => (
-            <div
-              key={row.id}
-              className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
-            >
-              {row.getAllCells().map((cell) => (
-                <div key={cell.id}>
-                  <table.FlexRender cell={cell} />
-                </div>
+      <div className="flex-1 overflow-auto min-h-0">
+        <div className="border border-gray-200 rounded-lg overflow-hidden min-w-[960px] bg-white">
+          {/* Header */}
+          {table.getHeaderGroups().map((hg) => (
+            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+              {hg.headers.map((header) => (
+                <span
+                  key={header.id}
+                  className="text-[10px] uppercase tracking-widest text-gray-400"
+                >
+                  <table.FlexRender header={header} />
+                </span>
               ))}
             </div>
           ))}
 
-        {/* Add new row */}
-        {!loading && (
-          <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
-            <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
-            <Sel
-              value={newRow.driverid || ""}
-              onChange={(e) => setNewRow((v) => ({ ...v, driverid: Number(e.target.value) }))}
-            >
-              <option value="">— driver —</option>
-              {drivers.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </Sel>
-            <Sel
-              value={newRow.vehicleid || ""}
-              onChange={(e) => setNewRow((v) => ({ ...v, vehicleid: Number(e.target.value) }))}
-            >
-              <option value="">— vehicle —</option>
-              {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.make} {v.model} ({v.year})
-                </option>
-              ))}
-            </Sel>
-            <Inp
-              value={newRow.number}
-              placeholder="number"
-              onChange={(e) => setNewRow((v) => ({ ...v, number: e.target.value }))}
-            />
-            <Inp
-              value={newRow.defaulttire}
-              placeholder="tire"
-              onChange={(e) => setNewRow((v) => ({ ...v, defaulttire: e.target.value }))}
-            />
-            <input
-              type="checkbox"
-              checked={newRow.active === 1}
-              onChange={(e) => setNewRow((v) => ({ ...v, active: e.target.checked ? 1 : 0 }))}
-              className="w-4 h-4 accent-gray-600 cursor-pointer"
-            />
-            <Inp
-              value={newRow.notes}
-              placeholder="notes"
-              onChange={(e) => setNewRow((v) => ({ ...v, notes: e.target.value }))}
-            />
-            <input
-              type="checkbox"
-              checked={newRow.master === 1}
-              onChange={(e) => setNewRow((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))}
-              className="w-4 h-4 accent-gray-600 cursor-pointer"
-            />
-            <Btn onClick={create}>Add</Btn>
-          </div>
-        )}
+          {loading && (
+            <div className="py-10 text-center text-xs text-gray-400">Loading...</div>
+          )}
+          {!loading && data.length === 0 && (
+            <div className="py-10 text-center text-xs text-gray-400">No entrants</div>
+          )}
+          {!loading &&
+            table.getRowModel().rows.map((row) => (
+              <div
+                key={row.id}
+                className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+              >
+                {row.getAllCells().map((cell) => (
+                  <div key={cell.id}>
+                    <table.FlexRender cell={cell} />
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {/* Add new row */}
+          {!loading && (
+            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
+              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+              <Sel
+                value={newRow.driverid || ""}
+                onChange={(e) => setNewRow((v) => ({ ...v, driverid: Number(e.target.value) }))}
+              >
+                <option value="">— driver —</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </Sel>
+              <Sel
+                value={newRow.vehicleid || ""}
+                onChange={(e) => setNewRow((v) => ({ ...v, vehicleid: Number(e.target.value) }))}
+              >
+                <option value="">— vehicle —</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.make} {v.model} ({v.year})
+                  </option>
+                ))}
+              </Sel>
+              <Inp
+                value={newRow.number}
+                placeholder="number"
+                onChange={(e) => setNewRow((v) => ({ ...v, number: e.target.value }))}
+              />
+              <Inp
+                value={newRow.defaulttire}
+                placeholder="tire"
+                onChange={(e) => setNewRow((v) => ({ ...v, defaulttire: e.target.value }))}
+              />
+              <input
+                type="checkbox"
+                checked={newRow.active === 1}
+                onChange={(e) => setNewRow((v) => ({ ...v, active: e.target.checked ? 1 : 0 }))}
+                className="w-4 h-4 accent-gray-600 cursor-pointer"
+              />
+              <Inp
+                value={newRow.notes}
+                placeholder="notes"
+                onChange={(e) => setNewRow((v) => ({ ...v, notes: e.target.value }))}
+              />
+              <input
+                type="checkbox"
+                checked={newRow.master === 1}
+                onChange={(e) => setNewRow((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))}
+                className="w-4 h-4 accent-gray-600 cursor-pointer"
+              />
+              <Btn onClick={create}>Add</Btn>
+            </div>
+          )}
+        </div>
       </div>
 
       {!loading && (
-        <p className="text-[11px] text-gray-400">{data.length} entrants</p>
+        <p className="text-[11px] text-gray-400 flex-shrink-0">{data.length} entrants</p>
       )}
     </div>
   );

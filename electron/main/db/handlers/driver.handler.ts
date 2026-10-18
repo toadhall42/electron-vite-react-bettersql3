@@ -32,8 +32,7 @@ ipcMain.handle("db/driver/delete", (_event, { id }): QueryResponse => {
 
 ipcMain.handle("db/driver/add", (_event, data): QueryResponse => {
   try {
-    DriverService.insert(data);
-    return response.ok();
+    return response.ok({ data: DriverService.insert(data) });
   } catch (err: unknown) {
     log.error("[DRIVER HANDLER] driver/insert failed", { data, err });
     return toErrorResponse(err);

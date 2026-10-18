@@ -58,6 +58,7 @@ export class DriverService {
         tx.rollback();
         throw new Error("insert failed");
       }
+      return { id: Number(result.lastInsertRowid) };
     });
   }
 }

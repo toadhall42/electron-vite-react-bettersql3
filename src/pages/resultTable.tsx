@@ -3,15 +3,17 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { getAllResults, addResult, updateResult, deleteResult } from "@/lib/api/result";
+import { getAllResults, addResult, updateResult, deleteResult, calculateResultsForEvent } from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEvents } from "@/lib/api/event";
+import { getAllSeasons } from "@/lib/api/season";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
   type EventWithDetails,
   type Result,
   type ResultWithDetails,
+  type Season,
   type InsertResult,
   type UpdateResult,
 } from "../../global.d";
@@ -42,8 +44,16 @@ const EMPTY_NEW = {
   comments: "",
 };
 
-// col widths:        id   driver  event  sess  class  pos  clPos  start  +/-  hc  race  bon  mast  tot  bonR  tire  class'n  comments  actions
-const GRID = "grid grid-cols-[44px_140px_140px_80px_70px_50px_50px_50px_45px_40px_60px_60px_60px_55px_60px_70px_80px_1fr_155px] items-center px-2";
+// col widths: id  driver  event (sized to fit)  sess  class  pos  clPos  start  +/-  hc  race  bon  mast  tot  bonR  tire  class'n  comments  actions
+const GRID = "grid items-center px-2";
+const gridCols = (eventWidth: number) =>
+  `44px 140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 60px 55px 60px 70px 80px 1fr 155px`;
+
+// Monospace glyphs are 0.6em wide: text-xs (12px) for display, text-sm (14px) inside selects
+const MONO_XS = 7.2;
+const MONO_SM = 8.4;
+const SELECT_CHROME = 48; // select padding + arrow
+const eventLabel = (e: EventWithDetails) => `#${e.number} ${e.track}`;
 
 function numInp(
   key: string,
@@ -80,21 +90,27 @@ export function ResultTablePage() {
   const [data, setData] = useState<ResultWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonFilter, setSeasonFilter] = useState<number | "">("");
+  const [eventFilter, setEventFilter] = useState<number | "">("");
   const [loading, setLoading] = useState(true);
+  const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Result>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
     setLoading(true);
-    const [resRes, drvRes, evtRes] = await Promise.all([
+    const [resRes, drvRes, evtRes, seaRes] = await Promise.all([
       getAllResults(),
       getAllDrivers(),
       getAllEvents(),
+      getAllSeasons(),
     ]);
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
+    setSeasons(((seaRes?.data as Season[]) ?? []).sort((a, b) => b.year - a.year));
     setLoading(false);
   }
 
@@ -134,6 +150,16 @@ export function ResultTablePage() {
     await updateResult(editingId, editRef.current as UpdateResult);
     editRef.current = {};
     setEditingId(null);
+    await load();
+  }
+
+  async function calculate() {
+    if (eventFilter === "") return;
+    setCalcStatus("Calculating...");
+    const res = await calculateResultsForEvent(eventFilter);
+    setCalcStatus(res?.code === 200 && res.data
+      ? `Calculated ${res.data.races} race session(s): ${res.data.inserted} added, ${res.data.updated} updated`
+      : `Calculate failed: ${res?.message ?? "no response"}`);
     await load();
   }
 
@@ -181,10 +207,10 @@ export function ResultTablePage() {
               <Sel key={`eventId-${editingId}`} defaultValue={editRef.current.eventId ?? ""}
                 onChange={(e) => { editRef.current = { ...editRef.current, eventId: Number(e.target.value) }; }}>
                 <option value="">— event —</option>
-                {events.map((e) => <option key={e.id} value={e.id}>#{e.number} {e.track}</option>)}
+                {events.map((e) => <option key={e.id} value={e.id}>{eventLabel(e)}</option>)}
               </Sel>
             ) : (
-              <span className="text-gray-800 text-xs truncate block">{info.row.original.eventTrack ?? "—"}</span>
+              <span className="text-gray-800 text-xs whitespace-nowrap block">{info.row.original.eventTrack ?? "—"}</span>
             ),
         }),
 
@@ -322,7 +348,32 @@ export function ResultTablePage() {
     [editingId, drivers, events]
   );
 
-  const table = useTable({ features, columns, data });
+  const seasonEvents = useMemo(
+    () => events
+      .filter((e) => seasonFilter === "" || e.seasonId === seasonFilter)
+      .sort((a, b) => a.number - b.number),
+    [events, seasonFilter]
+  );
+
+  const filteredData = useMemo(() => {
+    const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
+    return data.filter((r) =>
+      (eventFilter === "" || r.eventId === eventFilter) &&
+      (seasonFilter === "" || seasonEventIds.has(r.eventId))
+    );
+  }, [data, seasonEvents, seasonFilter, eventFilter]);
+
+  // Wide enough for the longest track name and for the "#n track" select in edit/add rows
+  const eventWidth = useMemo(() => {
+    const viewChars = Math.max(1, ...events.map((e) => e.track.length));
+    const selectChars = Math.max("— event —".length, ...events.map((e) => eventLabel(e).length));
+    return Math.ceil(Math.max(viewChars * MONO_XS, selectChars * MONO_SM + SELECT_CHROME));
+  }, [events]);
+  const gridStyle = { gridTemplateColumns: gridCols(eventWidth) };
+  // Fixed columns + event column + room for comments (was a flat 1760px with a 140px event column)
+  const tableMinWidth = 1620 + eventWidth;
+
+  const table = useTable({ features, columns, data: filteredData });
 
   return (
     <div className="flex flex-col gap-6 h-full overflow-hidden">
@@ -335,14 +386,36 @@ export function ResultTablePage() {
             Results
           </h1>
         </div>
-        <Btn onClick={load}>Refresh</Btn>
+        <div className="flex items-center gap-3">
+          <div className="w-48">
+            <Sel value={seasonFilter}
+              onChange={(e) => { setSeasonFilter(e.target.value === "" ? "" : Number(e.target.value)); setEventFilter(""); }}>
+              <option value="">All seasons</option>
+              {seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Sel>
+          </div>
+          <div className="w-64">
+            <Sel value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value === "" ? "" : Number(e.target.value))}>
+              <option value="">All events</option>
+              {seasonEvents.map((e) => <option key={e.id} value={e.id}>{eventLabel(e)}</option>)}
+            </Sel>
+          </div>
+          <Btn onClick={() => eventFilter !== "" && calculate()}>Calculate from Sessions</Btn>
+          <Btn onClick={load}>Refresh</Btn>
+        </div>
       </div>
 
+      {calcStatus && <p className="text-xs text-gray-500 flex-shrink-0">{calcStatus}</p>}
+      {!calcStatus && eventFilter === "" && (
+        <p className="text-xs text-gray-400 flex-shrink-0">Select an event to calculate its Results from Sessions</p>
+      )}
+
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white min-w-[1760px]">
+        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+            <div key={hg.id} style={gridStyle} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
               {hg.headers.map((header) => (
                 <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                   <table.FlexRender header={header} />
@@ -352,13 +425,16 @@ export function ResultTablePage() {
           ))}
 
           {loading && <div className="py-10 text-center text-xs text-gray-400">Loading...</div>}
-          {!loading && data.length === 0 && (
-            <div className="py-10 text-center text-xs text-gray-400">No results</div>
+          {!loading && filteredData.length === 0 && (
+            <div className="py-10 text-center text-xs text-gray-400">
+              {data.length === 0 ? "No results" : "No results match the selected filters"}
+            </div>
           )}
           {!loading &&
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
+                style={gridStyle}
                 className={`${GRID} py-2 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
               >
                 {row.getAllCells().map((cell) => (
@@ -371,7 +447,7 @@ export function ResultTablePage() {
 
           {/* Add new row */}
           {!loading && (
-            <div className={`${GRID} py-2 border-t border-gray-300 bg-gray-50`}>
+            <div style={gridStyle} className={`${GRID} py-2 border-t border-gray-300 bg-gray-50`}>
               <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
               <Sel value={newRow.driverId || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, driverId: Number(e.target.value) }))}>
@@ -381,7 +457,7 @@ export function ResultTablePage() {
               <Sel value={newRow.eventId || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, eventId: Number(e.target.value) }))}>
                 <option value="">— event —</option>
-                {events.map((e) => <option key={e.id} value={e.id}>#{e.number} {e.track}</option>)}
+                {events.map((e) => <option key={e.id} value={e.id}>{eventLabel(e)}</option>)}
               </Sel>
               <Inp value={newRow.sessionId} placeholder="session"
                 onChange={(e) => setNewRow((v) => ({ ...v, sessionId: e.target.value }))} />
@@ -421,7 +497,9 @@ export function ResultTablePage() {
       </div>
 
       {!loading && (
-        <p className="text-[11px] text-gray-400 flex-shrink-0">{data.length} results</p>
+        <p className="text-[11px] text-gray-400 flex-shrink-0">
+          {filteredData.length === data.length ? `${data.length} results` : `${filteredData.length} of ${data.length} results`}
+        </p>
       )}
     </div>
   );

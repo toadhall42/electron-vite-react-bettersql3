@@ -34,8 +34,7 @@ ipcMain.handle("db/entrant/delete", (_event, { id }): QueryResponse => {
 
 ipcMain.handle("db/entrant/add", (_event, data): QueryResponse => {
   try {
-    EntrantService.insert(data);
-    return response.ok();
+    return response.ok({ data: EntrantService.insert(data) });
   } catch (err: unknown) {
     log.error("[ENTRANT HANDLER] entrant/insert failed", { data, err });
     return toErrorResponse(err);

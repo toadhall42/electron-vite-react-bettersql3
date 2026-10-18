@@ -20,6 +20,10 @@ const withDetails = () =>
       sessionStartTime: sessions.sessionStartTime,
       driverId: sessions.driverId,
       eventId: sessions.eventId,
+      carClass: sessions.carClass,
+      carNumber: sessions.carNumber,
+      position: sessions.position,
+      bestLap: sessions.bestLap,
       driverName: drivers.name,
       eventTrack: events.track,
     })

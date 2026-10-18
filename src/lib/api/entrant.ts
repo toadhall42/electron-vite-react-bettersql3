@@ -26,7 +26,7 @@ export const deleteEntrant = async (id: number) => {
 };
 
 export const addEntrant = async (data: InsertEntrant) => {
-  return window.api.db({
+  return window.api.db<{ id: number }>({
     path: "db/entrant/add",
     params: data,
   });
