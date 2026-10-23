@@ -11,6 +11,7 @@ export const entrants = sqliteTable("entrants", {
   driverid: integer().notNull(),
   vehicleid: integer(),
   number: text().notNull(),
+  carclass: text(),
   defaulttire: text().notNull(),
   active: integer().notNull().default(1),
   notes: text(),
@@ -29,7 +30,10 @@ export type UpdateEntrant = z.infer<typeof UpdateEntrantModel>;
 
 export type EntrantWithDetails = Entrant & {
   driverName: string | null;
+  driverFirstName: string | null;
+  driverLastName: string | null;
   vehicleMake: string | null;
   vehicleModel: string | null;
   vehicleYear: string | null;
+  vehicleClass: string | null;
 };

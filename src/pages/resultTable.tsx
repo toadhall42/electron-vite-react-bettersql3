@@ -46,6 +46,22 @@ const EMPTY_NEW = {
 
 // col widths: id  driver  event (sized to fit)  sess  class  pos  clPos  start  +/-  hc  race  bon  mast  tot  bonR  tire  class'n  comments  actions
 const GRID = "grid items-center px-2";
+// Season totals: pos  driver  class  races  race  bonus  bonusRace  total  masters
+const TOTALS_GRID = "grid grid-cols-[50px_1fr_90px_70px_80px_80px_100px_80px_80px] items-center px-4";
+
+type DriverTotals = {
+  key: string;
+  rank: number;
+  driverName: string;
+  carClass: string;
+  races: number;
+  racePoints: number;
+  bonusPoints: number;
+  bonusRacePoints: number;
+  totalPoints: number;
+  mastersPoints: number;
+};
+
 const gridCols = (eventWidth: number) =>
   `44px 140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 60px 55px 60px 70px 80px 1fr 155px`;
 
@@ -54,6 +70,9 @@ const MONO_XS = 7.2;
 const MONO_SM = 8.4;
 const SELECT_CHROME = 48; // select padding + arrow
 const eventLabel = (e: EventWithDetails) => `#${e.number} ${e.track}`;
+// A race is the set of Race session rows sharing event + date + start time + name
+const raceKey = (r: ResultWithDetails) =>
+  [r.eventId, r.sessionDate ?? "", r.sessionStartTime ?? "", r.sessionName ?? ""].join("|");
 
 function numInp(
   key: string,
@@ -93,6 +112,7 @@ export function ResultTablePage() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
+  const [raceFilter, setRaceFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -355,13 +375,69 @@ export function ResultTablePage() {
     [events, seasonFilter]
   );
 
-  const filteredData = useMemo(() => {
+  const scopedData = useMemo(() => {
     const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
     return data.filter((r) =>
       (eventFilter === "" || r.eventId === eventFilter) &&
       (seasonFilter === "" || seasonEventIds.has(r.eventId))
     );
   }, [data, seasonEvents, seasonFilter, eventFilter]);
+
+  // Points only come from Race sessions, so only those are offered
+  const races = useMemo(() => {
+    const byKey = new Map<string, ResultWithDetails>();
+    for (const r of scopedData) {
+      if (r.sessionType === "Race" && !byKey.has(raceKey(r))) byKey.set(raceKey(r), r);
+    }
+    return [...byKey.entries()]
+      .sort(([, a], [, b]) =>
+        `${a.sessionDate} ${a.sessionStartTime ?? ""}`.localeCompare(`${b.sessionDate} ${b.sessionStartTime ?? ""}`))
+      .map(([key, r]) => ({
+        key,
+        label: [eventFilter === "" ? r.eventTrack : null, r.sessionName, r.sessionDate].filter(Boolean).join(" · "),
+      }));
+  }, [scopedData, eventFilter]);
+
+  const filteredData = useMemo(
+    () => scopedData.filter((r) => raceFilter === "" || raceKey(r) === raceFilter),
+    [scopedData, raceFilter]
+  );
+
+  // One row per driver + class, ranked by total points within each class
+  const totals = useMemo(() => {
+    const byDriver = new Map<string, DriverTotals & { raceKeys: Set<string> }>();
+    for (const r of scopedData) {
+      const carClass = (r.carClass ?? "").trim().toUpperCase();
+      const key = `${r.driverId}|${carClass}`;
+      const t = byDriver.get(key) ?? {
+        key, rank: 0, driverName: r.driverName ?? "—", carClass, races: 0, raceKeys: new Set<string>(),
+        racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0, mastersPoints: 0,
+      };
+      t.raceKeys.add(r.sessionId ? raceKey(r) : `row-${r.id}`);
+      t.racePoints += r.racePoints;
+      t.bonusPoints += r.bonusPoints;
+      t.bonusRacePoints += r.bonusRacePoints;
+      t.totalPoints += r.totalPoints;
+      t.mastersPoints += r.mastersPoints;
+      byDriver.set(key, t);
+    }
+    const rows = [...byDriver.values()]
+      .map(({ raceKeys, ...t }) => ({ ...t, races: raceKeys.size }))
+      .sort((a, b) => a.carClass.localeCompare(b.carClass) || b.totalPoints - a.totalPoints || a.driverName.localeCompare(b.driverName));
+    // Ties share a rank (1, 2, 2, 4)
+    let classStart = 0;
+    rows.forEach((t, i) => {
+      const prev = rows[i - 1];
+      if (!prev || prev.carClass !== t.carClass) classStart = i;
+      t.rank = prev && prev.carClass === t.carClass && prev.totalPoints === t.totalPoints ? prev.rank : i - classStart + 1;
+    });
+    return rows;
+  }, [scopedData]);
+
+  // Drop a race selection that no longer exists under the season/event filters
+  useEffect(() => {
+    if (raceFilter !== "" && !races.some((r) => r.key === raceFilter)) setRaceFilter("");
+  }, [races, raceFilter]);
 
   // Wide enough for the longest track name and for the "#n track" select in edit/add rows
   const eventWidth = useMemo(() => {
@@ -383,7 +459,7 @@ export function ResultTablePage() {
             dev
           </span>
           <h1 className="text-gray-900 text-sm font-semibold tracking-widest uppercase">
-            Results
+            Points
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -401,6 +477,12 @@ export function ResultTablePage() {
               {seasonEvents.map((e) => <option key={e.id} value={e.id}>{eventLabel(e)}</option>)}
             </Sel>
           </div>
+          <div className="w-64">
+            <Sel value={raceFilter} disabled={seasonFilter === ""} onChange={(e) => setRaceFilter(e.target.value)}>
+              <option value="">All races</option>
+              {races.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </Sel>
+          </div>
           <Btn onClick={() => eventFilter !== "" && calculate()}>Calculate from Sessions</Btn>
           <Btn onClick={load}>Refresh</Btn>
         </div>
@@ -411,6 +493,43 @@ export function ResultTablePage() {
         <p className="text-xs text-gray-400 flex-shrink-0">Select an event to calculate its Results from Sessions</p>
       )}
 
+      {!loading && seasonFilter === "" && (
+        <div className="py-10 text-center text-xs text-gray-400 border border-gray-200 rounded-lg bg-white">
+          Select a season to view points
+        </div>
+      )}
+
+      {/* Season (or event) totals until a single race is chosen */}
+      {seasonFilter !== "" && raceFilter === "" && (
+        <div className="flex-1 overflow-auto min-h-0">
+          <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[800px]">
+            <div className={`${TOTALS_GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
+              {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total", "Masters"].map((h) => (
+                <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">{h}</span>
+              ))}
+            </div>
+            {loading && <div className="py-10 text-center text-xs text-gray-400">Loading...</div>}
+            {!loading && totals.length === 0 && (
+              <div className="py-10 text-center text-xs text-gray-400">No points for the selected filters</div>
+            )}
+            {!loading && totals.map((t) => (
+              <div key={t.key} className={`${TOTALS_GRID} py-2 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors text-xs`}>
+                <span className="text-gray-400">{t.rank}</span>
+                <span className="text-gray-800 truncate">{t.driverName}</span>
+                <span className="text-gray-500">{t.carClass}</span>
+                <span className="text-gray-500">{t.races}</span>
+                <span className="text-gray-500">{t.racePoints}</span>
+                <span className="text-gray-500">{t.bonusPoints}</span>
+                <span className="text-gray-500">{t.bonusRacePoints}</span>
+                <span className="text-gray-900 font-semibold">{t.totalPoints}</span>
+                <span className="text-gray-500">{t.mastersPoints}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {seasonFilter !== "" && raceFilter !== "" && (
       <div className="flex-1 overflow-auto min-h-0">
         <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
           {/* Header */}
@@ -495,11 +614,10 @@ export function ResultTablePage() {
           )}
         </div>
       </div>
+      )}
 
-      {!loading && (
-        <p className="text-[11px] text-gray-400 flex-shrink-0">
-          {filteredData.length === data.length ? `${data.length} results` : `${filteredData.length} of ${data.length} results`}
-        </p>
+      {!loading && seasonFilter !== "" && raceFilter !== "" && (
+        <p className="text-[11px] text-gray-400 flex-shrink-0">{filteredData.length} results</p>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db-connect";
 import { results, drivers, events, sessions, entrants } from "../schema";
 import {
@@ -33,10 +33,16 @@ const withDetails = () =>
       comments: results.comments,
       driverName: drivers.name,
       eventTrack: events.track,
+      sessionName: sessions.name,
+      sessionType: sessions.sessionType,
+      sessionDate: sessions.sessionDate,
+      sessionStartTime: sessions.sessionStartTime,
     })
     .from(results)
     .leftJoin(drivers, eq(results.driverId, drivers.id))
-    .leftJoin(events, eq(results.eventId, events.id));
+    .leftJoin(events, eq(results.eventId, events.id))
+    // results.sessionId is text holding the session row id
+    .leftJoin(sessions, sql`${results.sessionId} = CAST(${sessions.id} AS TEXT)`);
 
 // A session is the set of driver rows sharing event + date + type + name + start time
 const sessionKey = (s: Session) => [s.sessionDate, s.sessionStartTime ?? "", s.name].join("|");
@@ -83,7 +89,8 @@ function scoreRace(race: Result[], pointModel: string, masterDriverIds: Set<numb
 
   if (pointModel.includes("Bonus Race")) {
     const bonusRacePoints = pointModel === "2025 Bonus Race" ? 2 : 5;
-    for (const r of race) scored.set(r.id, { bonusRacePoints });
+    // Bonus race points count toward the driver's total
+    for (const r of race) scored.set(r.id, { racePoints: 0, bonusPoints: 0, bonusRacePoints, totalPoints: bonusRacePoints });
     return scored;
   }
 

@@ -38,4 +38,8 @@ export type UpdateResult = z.infer<typeof UpdateResultModel>;
 export type ResultWithDetails = Result & {
   driverName: string | null;
   eventTrack: string | null;
+  sessionName: string | null;
+  sessionType: string | null;
+  sessionDate: string | null;
+  sessionStartTime: string | null;
 };

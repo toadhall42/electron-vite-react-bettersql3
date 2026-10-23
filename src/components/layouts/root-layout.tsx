@@ -1,5 +1,4 @@
 import { Outlet, Link } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import logo from "@assets/race-car.svg";
 
 const links = [
@@ -8,9 +7,9 @@ const links = [
   { to: "/entrantTable", label: "Entrants" },
   { to: "/seasonTable", label: "Seasons" },
   { to: "/eventTable", label: "Events" },
-  { to: "/sessionTable", label: "Sessions" },
+  { to: "/sessionTable", label: "Session Results" },
   { to: "/sessionImport", label: "Import Sessions" },
-  { to: "/resultTable", label: "Results" },
+  { to: "/resultTable", label: "Points" },
   { to: "/weatherTable", label: "Weather" },
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
@@ -57,7 +56,6 @@ export function RootLayout() {
         <Outlet />
       </main>
 
-      <TanStackRouterDevtools position="bottom-right" />
     </div>
   );
 }

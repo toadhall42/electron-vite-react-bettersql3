@@ -15,14 +15,18 @@ const withDetails = () =>
       driverid: entrants.driverid,
       vehicleid: entrants.vehicleid,
       number: entrants.number,
+      carclass: entrants.carclass,
       defaulttire: entrants.defaulttire,
       active: entrants.active,
       notes: entrants.notes,
       master: entrants.master,
       driverName: drivers.name,
+      driverFirstName: drivers.firstname,
+      driverLastName: drivers.lastname,
       vehicleMake: vehicles.make,
       vehicleModel: vehicles.model,
       vehicleYear: vehicles.year,
+      vehicleClass: vehicles.class,
     })
     .from(entrants)
     .leftJoin(drivers, eq(entrants.driverid, drivers.id))

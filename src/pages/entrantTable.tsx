@@ -27,8 +27,8 @@ import { Sel } from "@/components/common/select";
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, EntrantWithDetails>();
 const EMPTY: EntrantWithDetails[] = [];
-const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", defaulttire: "", active: 1, notes: "", master: 0 };
-const GRID = "grid grid-cols-[50px_150px_190px_80px_100px_60px_1fr_60px_170px] items-center px-4";
+const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "", master: 0 };
+const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_60px_170px] items-center px-4";
 
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
@@ -42,6 +42,9 @@ export function EntrantTablePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [driverSort, setDriverSort] = useState<"asc" | "desc" | null>(null);
+  // Mirrors editRef.current.vehicleid so the Class cell re-renders when the vehicle changes
+  const [editVehicleId, setEditVehicleId] = useState<number | null>(null);
   const editRef = useRef<Partial<Entrant>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
@@ -60,17 +63,23 @@ export function EntrantTablePage() {
 
   useEffect(() => { load(); }, []);
 
+  // Class comes from the selected vehicle; only entrants without a vehicle take a manual class
+  const vehicleClass = (vehicleid: number | null | undefined) =>
+    vehicles.find((v) => v.id === vehicleid)?.class ?? null;
+
   function startEdit(row: EntrantWithDetails) {
     editRef.current = {
       id: row.id,
       driverid: row.driverid,
       vehicleid: row.vehicleid,
       number: row.number,
+      carclass: row.carclass,
       defaulttire: row.defaulttire,
       active: row.active,
       notes: row.notes,
       master: row.master,
     };
+    setEditVehicleId(row.vehicleid || null);
     setEditingId(row.id);
   }
 
@@ -109,7 +118,12 @@ export function EntrantTablePage() {
         }),
         col.display({
           id: "driver",
-          header: "Driver",
+          header: () => (
+            <button type="button" className="uppercase tracking-widest hover:text-gray-700"
+              onClick={() => setDriverSort((s) => (s === null ? "asc" : s === "asc" ? "desc" : null))}>
+              Driver{driverSort === "asc" ? " ▲" : driverSort === "desc" ? " ▼" : ""}
+            </button>
+          ),
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Sel key={`driverid-${editingId}`} defaultValue={editRef.current.driverid ?? ""}
@@ -131,7 +145,12 @@ export function EntrantTablePage() {
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Sel key={`vehicleid-${editingId}`} defaultValue={editRef.current.vehicleid ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, vehicleid: Number(e.target.value) }; }}>
+                onChange={(e) => {
+                  const vehicleid = Number(e.target.value) || null;
+                  const carclass = vehicleClass(vehicleid) ?? editRef.current.carclass;
+                  editRef.current = { ...editRef.current, vehicleid, carclass };
+                  setEditVehicleId(vehicleid);
+                }}>
                 <option value="">— vehicle —</option>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -155,6 +174,20 @@ export function EntrantTablePage() {
                 onChange={(e) => { editRef.current = { ...editRef.current, number: e.target.value }; }} />
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
+            ),
+        }),
+        col.accessor("carclass", {
+          header: "Class",
+          cell: (info) =>
+            editingId === info.row.original.id ? (
+              editVehicleId ? (
+                <Inp key={`carclass-${editingId}-${editVehicleId}`} value={vehicleClass(editVehicleId) ?? ""} disabled readOnly />
+              ) : (
+                <Inp key={`carclass-${editingId}`} defaultValue={editRef.current.carclass ?? ""}
+                  onChange={(e) => { editRef.current = { ...editRef.current, carclass: e.target.value }; }} />
+              )
+            ) : (
+              <span className="text-gray-500 text-xs">{info.row.original.vehicleClass ?? info.getValue() ?? ""}</span>
             ),
         }),
         col.accessor("defaulttire", {
@@ -222,10 +255,18 @@ export function EntrantTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, vehicles]
+    [editingId, editVehicleId, drivers, vehicles, driverSort]
   );
 
-  const table = useTable({ features, columns, data });
+  // Click cycles Driver: last name A–Z, Z–A, then back to the original order
+  const sortedData = useMemo(() => {
+    if (!driverSort) return data;
+    const name = (e: EntrantWithDetails) => `${e.driverLastName ?? ""} ${e.driverFirstName ?? ""}`;
+    const dir = driverSort === "asc" ? 1 : -1;
+    return [...data].sort((a, b) => dir * name(a).localeCompare(name(b), undefined, { sensitivity: "base" }));
+  }, [data, driverSort]);
+
+  const table = useTable({ features, columns, data: sortedData });
 
   return (
     <div className="flex flex-col gap-6 h-full overflow-hidden">
@@ -242,10 +283,10 @@ export function EntrantTablePage() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="border border-gray-200 rounded-lg overflow-hidden min-w-[960px] bg-white">
+        <div className="border border-gray-200 rounded-lg overflow-clip min-w-[1040px] bg-white">
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {hg.headers.map((header) => (
                 <span
                   key={header.id}
@@ -279,7 +320,7 @@ export function EntrantTablePage() {
 
           {/* Add new row */}
           {!loading && (
-            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
+            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
               <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
               <Sel
                 value={newRow.driverid || ""}
@@ -292,7 +333,10 @@ export function EntrantTablePage() {
               </Sel>
               <Sel
                 value={newRow.vehicleid || ""}
-                onChange={(e) => setNewRow((v) => ({ ...v, vehicleid: Number(e.target.value) }))}
+                onChange={(e) => {
+                  const vehicleid = Number(e.target.value);
+                  setNewRow((v) => ({ ...v, vehicleid, carclass: vehicleClass(vehicleid) ?? v.carclass }));
+                }}
               >
                 <option value="">— vehicle —</option>
                 {vehicles.map((v) => (
@@ -305,6 +349,12 @@ export function EntrantTablePage() {
                 value={newRow.number}
                 placeholder="number"
                 onChange={(e) => setNewRow((v) => ({ ...v, number: e.target.value }))}
+              />
+              <Inp
+                value={newRow.carclass}
+                placeholder="class"
+                disabled={!!newRow.vehicleid}
+                onChange={(e) => setNewRow((v) => ({ ...v, carclass: e.target.value }))}
               />
               <Inp
                 value={newRow.defaulttire}

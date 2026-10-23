@@ -42,8 +42,8 @@ const EMPTY_NEW = {
 const SESSION_TYPES = ["Practice", "Qualify", "Race"] as const;
 type SessionType = (typeof SESSION_TYPES)[number];
 
-// id  name  evtSeq  snRace  type  date  time  driver  event  class  car#  pos  best  actions
-const GRID = "grid grid-cols-[44px_1fr_70px_80px_110px_140px_110px_140px_140px_70px_60px_50px_100px_155px] items-center px-4";
+// id  driver  event  class  car#  pos  best  actions
+const GRID = "grid grid-cols-[44px_1fr_200px_80px_60px_50px_100px_155px] items-center px-4";
 
 export function SessionTablePage() {
   const [data, setData] = useState<SessionWithDetails[]>([]);
@@ -53,6 +53,8 @@ export function SessionTablePage() {
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
   const [typeFilter, setTypeFilter] = useState<SessionType | "">("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Session>>({});
@@ -118,80 +120,83 @@ export function SessionTablePage() {
     await load();
   }
 
+  const seasonEvents = useMemo(
+    () => events
+      .filter((e) => seasonFilter === "" || e.seasonId === seasonFilter)
+      .sort((a, b) => a.number - b.number),
+    [events, seasonFilter]
+  );
+
+  // Rows matching season/event/type — the name filter narrows these further
+  const scopedData = useMemo(() => {
+    const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
+    return data.filter((s) =>
+      (eventFilter === "" || s.eventId === eventFilter) &&
+      (seasonFilter === "" || seasonEventIds.has(s.eventId)) &&
+      (typeFilter === "" || s.sessionType === typeFilter)
+    );
+  }, [data, seasonEvents, seasonFilter, eventFilter, typeFilter]);
+
+  const sessionNames = useMemo(
+    () => [...new Set(scopedData.map((s) => s.name).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [scopedData]
+  );
+
+  // Sorted by finish position; position 0/null means did not start and sorts last
+  const filteredData = useMemo(
+    () => scopedData
+      .filter((s) => nameFilter === "" || s.name === nameFilter)
+      .sort((a, b) => (a.position || Infinity) - (b.position || Infinity)),
+    [scopedData, nameFilter]
+  );
+
+  // Drop a name selection that no longer exists under the other filters
+  useEffect(() => {
+    if (nameFilter !== "" && !sessionNames.includes(nameFilter)) setNameFilter("");
+  }, [sessionNames, nameFilter]);
+
+  // Rows are only shown once the filters narrow to exactly one session
+  const isSingleSession = useMemo(
+    () => new Set(filteredData.map((s) => `${s.eventId}|${s.sessionType}|${s.name}`)).size === 1,
+    [filteredData]
+  );
+  const sessionTemplate = isSingleSession ? filteredData[0] : null;
+
+  // Class filter applies within the selected session, after the single-session check
+  const classOptions = useMemo(
+    () => [...new Set(filteredData.map((s) => s.carClass).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)),
+    [filteredData]
+  );
+  const displayData = useMemo(
+    () => filteredData.filter((s) => classFilter === "" || s.carClass === classFilter),
+    [filteredData, classFilter]
+  );
+
+  useEffect(() => {
+    if (classFilter !== "" && !classOptions.includes(classFilter)) setClassFilter("");
+  }, [classOptions, classFilter]);
+
+  // New rows inherit the selected session's shared fields (no longer editable in the grid)
+  useEffect(() => {
+    if (!sessionTemplate) return;
+    setNewRow((v) => ({
+      ...v,
+      name: sessionTemplate.name,
+      eventSequence: sessionTemplate.eventSequence ?? 0,
+      seasonRaceNumber: sessionTemplate.seasonRaceNumber ?? 0,
+      sessionType: sessionTemplate.sessionType as SessionType,
+      sessionDate: sessionTemplate.sessionDate ?? "",
+      sessionStartTime: sessionTemplate.sessionStartTime ?? "",
+      eventId: sessionTemplate.eventId,
+    }));
+  }, [sessionTemplate]);
+
   const columns = useMemo(
     () =>
       col.columns([
         col.accessor("id", {
           header: "ID",
           cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
-        }),
-        col.accessor("name", {
-          header: "Name",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Inp key={`name-${editingId}`} defaultValue={editRef.current.name ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, name: e.target.value }; }} />
-            ) : (
-              <span className="text-gray-800 text-xs">{info.getValue()}</span>
-            ),
-        }),
-        col.accessor("eventSequence", {
-          header: "Evt Seq",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Inp key={`eventSequence-${editingId}`} defaultValue={String(editRef.current.eventSequence ?? "")}
-                onChange={(e) => { editRef.current = { ...editRef.current, eventSequence: Number(e.target.value) }; }} />
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
-        }),
-        col.accessor("seasonRaceNumber", {
-          header: "Sn Race #",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Inp key={`seasonRaceNumber-${editingId}`} defaultValue={String(editRef.current.seasonRaceNumber ?? "")}
-                onChange={(e) => { editRef.current = { ...editRef.current, seasonRaceNumber: Number(e.target.value) }; }} />
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
-        }),
-        col.accessor("sessionType", {
-          header: "Type",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Sel key={`sessionType-${editingId}`} defaultValue={editRef.current.sessionType ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, sessionType: e.target.value as SessionType }; }}>
-                {SESSION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </Sel>
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
-        }),
-        col.accessor("sessionDate", {
-          header: "Date",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <input key={`sessionDate-${editingId}`} type="date"
-                defaultValue={editRef.current.sessionDate ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, sessionDate: e.target.value }; }}
-                className="bg-white border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-800 font-mono outline-none focus:border-gray-500 w-full"
-              />
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
-        }),
-        col.accessor("sessionStartTime", {
-          header: "Start Time",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <input key={`sessionStartTime-${editingId}`} type="time"
-                defaultValue={editRef.current.sessionStartTime ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, sessionStartTime: e.target.value }; }}
-                className="bg-white border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-800 font-mono outline-none focus:border-gray-500 w-full"
-              />
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
         }),
         col.display({
           id: "driver",
@@ -222,7 +227,13 @@ export function SessionTablePage() {
             ),
         }),
         col.accessor("carClass", {
-          header: "Class",
+          header: () => (
+            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}
+              className="bg-white border border-gray-300 rounded-md px-1 py-0.5 text-[10px] uppercase tracking-widest text-gray-500 font-mono outline-none focus:border-gray-500 w-full">
+              <option value="">Class</option>
+              {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          ),
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Inp key={`carClass-${editingId}`} defaultValue={editRef.current.carClass ?? ""}
@@ -248,7 +259,7 @@ export function SessionTablePage() {
               <Inp key={`position-${editingId}`} defaultValue={String(editRef.current.position ?? 0)}
                 onChange={(e) => { editRef.current = { ...editRef.current, position: Number(e.target.value) }; }} />
             ) : (
-              <span className="text-gray-500 text-xs">{info.getValue()}</span>
+              <span className="text-gray-500 text-xs">{info.getValue() || "DNS"}</span>
             ),
         }),
         col.accessor("bestLap", {
@@ -280,35 +291,10 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, events]
+    [editingId, drivers, events, classFilter, classOptions]
   );
 
-  const seasonEvents = useMemo(
-    () => events
-      .filter((e) => seasonFilter === "" || e.seasonId === seasonFilter)
-      .sort((a, b) => a.number - b.number),
-    [events, seasonFilter]
-  );
-
-  const filteredData = useMemo(() => {
-    const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
-    return data.filter((s) =>
-      (eventFilter === "" || s.eventId === eventFilter) &&
-      (seasonFilter === "" || seasonEventIds.has(s.eventId)) &&
-      (typeFilter === "" || s.sessionType === typeFilter)
-    );
-  }, [data, seasonEvents, seasonFilter, eventFilter, typeFilter]);
-
-  // New rows start in the filtered event/type
-  useEffect(() => {
-    setNewRow((v) => ({
-      ...v,
-      eventId: eventFilter === "" ? v.eventId : eventFilter,
-      sessionType: typeFilter === "" ? v.sessionType : typeFilter,
-    }));
-  }, [eventFilter, typeFilter]);
-
-  const table = useTable({ features, columns, data: filteredData });
+  const table = useTable({ features, columns, data: displayData });
 
   return (
     <div className="flex flex-col gap-6 h-full overflow-hidden">
@@ -318,7 +304,7 @@ export function SessionTablePage() {
             dev
           </span>
           <h1 className="text-gray-900 text-sm font-semibold tracking-widest uppercase">
-            Sessions
+            Session Results
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -342,15 +328,21 @@ export function SessionTablePage() {
               {SESSION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </Sel>
           </div>
+          <div className="w-56">
+            <Sel value={nameFilter} onChange={(e) => setNameFilter(e.target.value)}>
+              <option value="">All names</option>
+              {sessionNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            </Sel>
+          </div>
           <Btn onClick={load}>Refresh</Btn>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white min-w-[1500px]">
+        <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[900px]">
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {hg.headers.map((header) => (
                 <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                   <table.FlexRender header={header} />
@@ -365,7 +357,12 @@ export function SessionTablePage() {
               {data.length === 0 ? "No sessions" : "No sessions match the selected filters"}
             </div>
           )}
-          {!loading &&
+          {!loading && filteredData.length > 0 && !isSingleSession && (
+            <div className="py-10 text-center text-xs text-gray-400">
+              Select filters down to a single session
+            </div>
+          )}
+          {!loading && isSingleSession &&
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
@@ -380,27 +377,9 @@ export function SessionTablePage() {
             ))}
 
           {/* Add new row */}
-          {!loading && (
-            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
+          {!loading && isSingleSession && (
+            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
               <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
-              <Inp value={newRow.name} placeholder="name"
-                onChange={(e) => setNewRow((v) => ({ ...v, name: e.target.value }))} />
-              <Inp value={String(newRow.eventSequence)} placeholder="seq"
-                onChange={(e) => setNewRow((v) => ({ ...v, eventSequence: Number(e.target.value) }))} />
-              <Inp value={String(newRow.seasonRaceNumber)} placeholder="sn#"
-                onChange={(e) => setNewRow((v) => ({ ...v, seasonRaceNumber: Number(e.target.value) }))} />
-              <Sel value={newRow.sessionType}
-                onChange={(e) => setNewRow((v) => ({ ...v, sessionType: e.target.value as SessionType }))}>
-                {SESSION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </Sel>
-              <input type="date" value={newRow.sessionDate}
-                onChange={(e) => setNewRow((v) => ({ ...v, sessionDate: e.target.value }))}
-                className="bg-white border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-800 font-mono outline-none focus:border-gray-500 w-full"
-              />
-              <input type="time" value={newRow.sessionStartTime}
-                onChange={(e) => setNewRow((v) => ({ ...v, sessionStartTime: e.target.value }))}
-                className="bg-white border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-800 font-mono outline-none focus:border-gray-500 w-full"
-              />
               <Sel value={newRow.driverId || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, driverId: Number(e.target.value) }))}>
                 <option value="">— driver —</option>
@@ -424,12 +403,6 @@ export function SessionTablePage() {
           )}
         </div>
       </div>
-
-      {!loading && (
-        <p className="text-[11px] text-gray-400 flex-shrink-0">
-          {filteredData.length === data.length ? `${data.length} sessions` : `${filteredData.length} of ${data.length} sessions`}
-        </p>
-      )}
     </div>
   );
 }
