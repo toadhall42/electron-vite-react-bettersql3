@@ -5,11 +5,13 @@ import {
 } from "@tanstack/react-table";
 import { getAllResults, addResult, updateResult, deleteResult, calculateResultsForEvent } from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
+import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
+  type EntrantWithDetails,
   type EventWithDetails,
   type Result,
   type ResultWithDetails,
@@ -51,6 +53,7 @@ const TOTALS_GRID = "grid grid-cols-[50px_1fr_90px_70px_80px_80px_100px_80px_80p
 
 type DriverTotals = {
   key: string;
+  driverId: number;
   rank: number;
   driverName: string;
   carClass: string;
@@ -73,6 +76,12 @@ const eventLabel = (e: EventWithDetails) => `#${e.number} ${e.track}`;
 // A race is the set of Race session rows sharing event + date + start time + name
 const raceKey = (r: ResultWithDetails) =>
   [r.eventId, r.sessionDate ?? "", r.sessionStartTime ?? "", r.sessionName ?? ""].join("|");
+const normClass = (c: string | null | undefined) => (c ?? "").trim().toUpperCase();
+
+type MasterFilter = "" | "yes";
+
+const HEADER_SELECT =
+  "bg-white border border-gray-300 rounded-md px-1 py-0.5 text-[10px] uppercase tracking-widest text-gray-500 font-mono outline-none focus:border-gray-500 w-full";
 
 function numInp(
   key: string,
@@ -113,6 +122,10 @@ export function ResultTablePage() {
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
   const [raceFilter, setRaceFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [masterFilter, setMasterFilter] = useState<MasterFilter>("");
+  // Drivers with any Entrant flagged master — same rule the points calculation uses
+  const [masterDriverIds, setMasterDriverIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -121,12 +134,15 @@ export function ResultTablePage() {
 
   async function load() {
     setLoading(true);
-    const [resRes, drvRes, evtRes, seaRes] = await Promise.all([
+    const [resRes, drvRes, evtRes, seaRes, entRes] = await Promise.all([
       getAllResults(),
       getAllDrivers(),
       getAllEvents(),
       getAllSeasons(),
+      getAllEntrants(),
     ]);
+    const entrants = (entRes?.data as EntrantWithDetails[]) ?? [];
+    setMasterDriverIds(new Set(entrants.filter((e) => e.master).map((e) => e.driverid)));
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
@@ -194,6 +210,29 @@ export function ResultTablePage() {
     await load();
   }
 
+  const classOptions = useMemo(
+    () => [...new Set(data.map((r) => normClass(r.carClass)).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [data]
+  );
+
+  const matchesColumnFilters = (driverId: number, carClass: string | null | undefined) =>
+    (classFilter === "" || normClass(carClass) === classFilter) &&
+    (masterFilter === "" || masterDriverIds.has(driverId));
+
+  const classHeader = () => (
+    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={HEADER_SELECT}>
+      <option value="">Class</option>
+      {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+    </select>
+  );
+
+  const masterHeader = () => (
+    <select value={masterFilter} onChange={(e) => setMasterFilter(e.target.value as MasterFilter)} className={HEADER_SELECT}>
+      <option value="">All</option>
+      <option value="yes">MASTERS ONLY</option>
+    </select>
+  );
+
   const columns = useMemo(
     () =>
       col.columns([
@@ -242,7 +281,7 @@ export function ResultTablePage() {
               : <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>,
         }),
         col.accessor("carClass", {
-          header: "Class",
+          header: classHeader,
           cell: (info) =>
             editingId === info.row.original.id
               ? txtInp(`carClass-${editingId}`, editRef.current.carClass, "carClass", editRef)
@@ -304,7 +343,7 @@ export function ResultTablePage() {
               : <span className="text-gray-500 text-xs">{info.getValue()}</span>,
         }),
         col.accessor("mastersPoints", {
-          header: "Masters",
+          header: masterHeader,
           cell: (info) =>
             editingId === info.row.original.id
               ? numInp(`mastersPoints-${editingId}`, editRef.current.mastersPoints, "mastersPoints", editRef)
@@ -365,7 +404,7 @@ export function ResultTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, events]
+    [editingId, drivers, events, classFilter, classOptions, masterFilter]
   );
 
   const seasonEvents = useMemo(
@@ -399,8 +438,10 @@ export function ResultTablePage() {
   }, [scopedData, eventFilter]);
 
   const filteredData = useMemo(
-    () => scopedData.filter((r) => raceFilter === "" || raceKey(r) === raceFilter),
-    [scopedData, raceFilter]
+    () => scopedData.filter((r) =>
+      (raceFilter === "" || raceKey(r) === raceFilter) && matchesColumnFilters(r.driverId, r.carClass)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopedData, raceFilter, classFilter, masterFilter, masterDriverIds]
   );
 
   // One row per driver + class, ranked by total points within each class
@@ -410,7 +451,7 @@ export function ResultTablePage() {
       const carClass = (r.carClass ?? "").trim().toUpperCase();
       const key = `${r.driverId}|${carClass}`;
       const t = byDriver.get(key) ?? {
-        key, rank: 0, driverName: r.driverName ?? "—", carClass, races: 0, raceKeys: new Set<string>(),
+        key, driverId: r.driverId, rank: 0, driverName: r.driverName ?? "—", carClass, races: 0, raceKeys: new Set<string>(),
         racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0, mastersPoints: 0,
       };
       t.raceKeys.add(r.sessionId ? raceKey(r) : `row-${r.id}`);
@@ -433,6 +474,13 @@ export function ResultTablePage() {
     });
     return rows;
   }, [scopedData]);
+
+  // Applied after ranking, so a driver keeps their place in class
+  const visibleTotals = useMemo(
+    () => totals.filter((t) => matchesColumnFilters(t.driverId, t.carClass)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [totals, classFilter, masterFilter, masterDriverIds]
+  );
 
   // Drop a race selection that no longer exists under the season/event filters
   useEffect(() => {
@@ -505,14 +553,16 @@ export function ResultTablePage() {
           <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[800px]">
             <div className={`${TOTALS_GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total", "Masters"].map((h) => (
-                <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">{h}</span>
+                <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">
+                  {h === "Class" ? classHeader() : h === "Masters" ? masterHeader() : h}
+                </span>
               ))}
             </div>
             {loading && <div className="py-10 text-center text-xs text-gray-400">Loading...</div>}
-            {!loading && totals.length === 0 && (
+            {!loading && visibleTotals.length === 0 && (
               <div className="py-10 text-center text-xs text-gray-400">No points for the selected filters</div>
             )}
-            {!loading && totals.map((t) => (
+            {!loading && visibleTotals.map((t) => (
               <div key={t.key} className={`${TOTALS_GRID} py-2 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors text-xs`}>
                 <span className="text-gray-400">{t.rank}</span>
                 <span className="text-gray-800 truncate">{t.driverName}</span>
