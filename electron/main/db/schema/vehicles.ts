@@ -14,6 +14,7 @@ export const vehicles = sqliteTable("vehicles", {
   class: text().notNull(),
   transponder: text(),
   chassisid: text(),
+  currentDriver: text(),
 });
 
 export const VehicleModel = createSelectSchema(vehicles);

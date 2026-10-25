@@ -42,7 +42,7 @@ export function EntrantTablePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [driverSort, setDriverSort] = useState<"asc" | "desc" | null>(null);
+  const [driverSort, setDriverSort] = useState<"asc" | "desc" | null>("asc");
   // Mirrors editRef.current.vehicleid so the Class cell re-renders when the vehicle changes
   const [editVehicleId, setEditVehicleId] = useState<number | null>(null);
   const editRef = useRef<Partial<Entrant>>({});

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { getAllDrivers, addDriver } from "@/lib/api/driver";
-import { addEntrant } from "@/lib/api/entrant";
+import { addEntrant, getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
 import { getAllSessions, addSession, updateSession } from "@/lib/api/session";
 import {
   type Driver,
+  type EntrantWithDetails,
   type EventWithDetails,
   type InsertDriver,
   type InsertEntrant,
@@ -19,7 +20,7 @@ import { Inp } from "@/components/common/input";
 
 const SESSION_TYPES = ["Practice", "Qualify", "Race"] as const;
 type SessionType = (typeof SESSION_TYPES)[number];
-type Action = "new" | "update" | "ignore";
+type Action = "confirm" | "new" | "update" | "ignore";
 
 interface ExtractedRow {
   action: Action;
@@ -31,6 +32,15 @@ interface ExtractedRow {
   position: number;
   bestLap: string;
   message: string;
+  // Present while action is "confirm": a close-but-not-exact Entrant awaiting user validation
+  suggestion: FuzzySuggestion | null;
+}
+
+interface FuzzySuggestion {
+  key: string;
+  driverId: number;
+  entrantName: string;
+  score: number;
 }
 
 const IDLE_MSG = "Select Season, Event, Session Type, Date, and Name — then drag and drop a JSON results file here";
@@ -47,6 +57,36 @@ function extractRows(json: unknown): Record<string, unknown>[] {
 }
 
 const norm = (s: string) => s.replace(/\./g, "").trim().replace(/\s+/g, " ").toLowerCase();
+const normClass = (s: string) => s.trim().toUpperCase();
+const entrantClass = (e: EntrantWithDetails) => e.vehicleClass ?? e.carclass ?? "";
+
+// Minimum similarity (0–1) for an Entrant to be offered as a fuzzy match
+const FUZZY_THRESHOLD = 0.75;
+
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+const ratio = (a: string, b: string) => (a || b ? 1 - levenshtein(a, b) / Math.max(a.length, b.length) : 1);
+
+// Best of a straight comparison and a word-order-insensitive one, so "Smith, John" ≈ "John Smith"
+function nameSimilarity(a: string, b: string): number {
+  const sorted = (s: string) => norm(s.replace(/,/g, " ")).split(" ").sort().join(" ");
+  return Math.max(ratio(norm(a), norm(b)), ratio(sorted(a), sorted(b)));
+}
+
+// Key for a user's accept/reject of one fuzzy pairing: file name + class + candidate driver
+const fuzzyKey = (name: string, carClass: string, driverId: number) =>
+  `${norm(name)}|${normClass(carClass)}|${driverId}`;
+type FuzzyDecisions = Record<string, "accept" | "reject">;
 
 // Classes that get an Entrant (with no vehicle) when a new Driver is added from an import
 const AUTO_ENTRANT_CLASSES = ["CF", "HF"];
@@ -79,6 +119,7 @@ const fullName = (d: NewDriverDraft) =>
   [d.firstname, d.lastname, d.suffix].map((p) => p.trim()).filter(Boolean).join(" ");
 
 const ACTION_STYLE: Record<Action, string> = {
+  confirm: "text-amber-600",
   new: "text-green-700",
   update: "text-blue-700",
   ignore: "text-red-500",
@@ -89,6 +130,7 @@ export function SessionImportPage() {
   const [events, setEvents] = useState<EventWithDetails[]>([]);
   const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [entrants, setEntrants] = useState<EntrantWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [seasonId, setSeasonId] = useState<number | null>(null);
@@ -102,6 +144,7 @@ export function SessionImportPage() {
   const [rawJson, setRawJson] = useState<unknown>(null);
   // Keyed by the driver_name as it appears in the file
   const [drafts, setDrafts] = useState<Record<string, NewDriverDraft>>({});
+  const [fuzzyDecisions, setFuzzyDecisions] = useState<FuzzyDecisions>({});
   const [adding, setAdding] = useState(false);
   const [isImported, setIsImported] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -109,22 +152,25 @@ export function SessionImportPage() {
 
   async function load() {
     setLoading(true);
-    const [seaRes, evtRes, sesRes, drvRes] = await Promise.all([
+    const [seaRes, evtRes, sesRes, drvRes, entRes] = await Promise.all([
       getAllSeasons(),
       getAllEvents(),
       getAllSessions(),
       getAllDrivers(),
+      getAllEntrants(),
     ]);
     const driverList = (drvRes?.data as Driver[]) ?? [];
+    const entrantList = (entRes?.data as EntrantWithDetails[]) ?? [];
     const sessionList = (sesRes?.data as SessionWithDetails[]) ?? [];
     const seasonList = ((seaRes?.data as Season[]) ?? []).sort((a, b) => b.year - a.year);
     setSeasons(seasonList);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
     setSessions(sessionList);
     setDrivers(driverList);
+    setEntrants(entrantList);
     setSeasonId((cur) => cur ?? seasonList[0]?.id ?? null);
     setLoading(false);
-    return { driverList, sessionList };
+    return { driverList, sessionList, entrantList };
   }
 
   useEffect(() => { load(); }, []);
@@ -143,6 +189,7 @@ export function SessionImportPage() {
     setRows([]);
     setRawJson(null);
     setDrafts({});
+    setFuzzyDecisions({});
     setIsImported(false);
     setStatus(msg);
   }
@@ -154,6 +201,43 @@ export function SessionImportPage() {
     if (active.length === 1) return { driver: active[0], message: "" };
     if (active.length > 1) return { driver: active[0], message: "WARNING: Multiple active Drivers with this name" };
     return { driver: matches[0], message: "WARNING: Driver is inactive" };
+  }
+
+  type EntrantMatch =
+    | { kind: "exact"; driverId: number; name: string; message: string }
+    | { kind: "fuzzy"; suggestion: FuzzySuggestion }
+    | { kind: "none" };
+
+  // Entrants in the same car class, matched on driver name: exact first, then the closest
+  // fuzzy candidate the user hasn't rejected (an accepted one counts as exact)
+  function matchEntrant(name: string, carClass: string, entrantList: EntrantWithDetails[], decisions: FuzzyDecisions): EntrantMatch {
+    const inClass = entrantList.filter((e) => e.driverName && normClass(entrantClass(e)) === normClass(carClass));
+    // One candidate per driver, preferring an active Entrant
+    const byDriver = new Map<number, EntrantWithDetails>();
+    for (const e of inClass) {
+      const cur = byDriver.get(e.driverid);
+      if (!cur || (!cur.active && e.active)) byDriver.set(e.driverid, e);
+    }
+    const candidates = [...byDriver.values()];
+
+    const exact = candidates.filter((e) => norm(e.driverName!) === norm(name));
+    if (exact.length > 0) {
+      const pick = exact.find((e) => e.active) ?? exact[0];
+      const message = exact.length > 1 ? "WARNING: Multiple Entrants with this name in class"
+        : pick.active ? "" : "WARNING: Entrant is inactive";
+      return { kind: "exact", driverId: pick.driverid, name: pick.driverName!, message };
+    }
+
+    const scored = candidates
+      .map((e) => ({ e, score: nameSimilarity(name, e.driverName!), key: fuzzyKey(name, carClass, e.driverid) }))
+      .filter((c) => c.score >= FUZZY_THRESHOLD && decisions[c.key] !== "reject")
+      .sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    if (!best) return { kind: "none" };
+    if (decisions[best.key] === "accept") {
+      return { kind: "exact", driverId: best.e.driverid, name: best.e.driverName!, message: `Fuzzy match accepted for "${name}"` };
+    }
+    return { kind: "fuzzy", suggestion: { key: best.key, driverId: best.e.driverid, entrantName: best.e.driverName!, score: best.score } };
   }
 
   // Same event + type + date + name + start time + driver is the same session entry
@@ -173,7 +257,13 @@ export function SessionImportPage() {
     };
   }
 
-  function processJson(json: unknown, driverList = drivers, sessionList = sessions) {
+  function processJson(
+    json: unknown,
+    driverList = drivers,
+    sessionList = sessions,
+    entrantList = entrants,
+    decisions = fuzzyDecisions,
+  ) {
     const raw = extractRows(json);
     if (raw.length === 0) {
       reset("No results found in JSON — expected { result: [...] } or an array");
@@ -187,23 +277,36 @@ export function SessionImportPage() {
       const bestLap = String(r.best_lap_time ?? r.bestLap ?? "");
       const carNumber = String(r.car_number ?? r.carNumber ?? r.number ?? "").trim();
 
-      const { driver, message: driverMsg } = matchDriver(driverName, driverList);
-      if (!driver) {
-        return { action: "ignore", sessionRowId: null, driverId: null, driverName, carClass, carNumber, position, bestLap,
-          message: `Ignore Entry - ${driverMsg}` };
+      const base = { driverName, carClass, carNumber, position, bestLap, suggestion: null };
+
+      const entrant = matchEntrant(driverName, carClass, entrantList, decisions);
+      if (entrant.kind === "fuzzy") {
+        const { entrantName, score } = entrant.suggestion;
+        return { ...base, action: "confirm", sessionRowId: null, driverId: null, suggestion: entrant.suggestion,
+          message: `Confirm match - "${entrantName}" (${Math.round(score * 100)}% similar)` };
       }
 
-      const { sessionRowId, message: sessionMsg } = matchSession(driver.id, sessionList);
-      const warning = [driverMsg, sessionMsg].filter(Boolean).join("; ");
+      // No Entrant in this class — fall back to an exact Driver name match
+      let matched: { id: number; name: string; message: string } | null = null;
+      if (entrant.kind === "exact") {
+        matched = { id: entrant.driverId, name: entrant.name, message: entrant.message };
+      } else {
+        const { driver, message } = matchDriver(driverName, driverList);
+        if (!driver) return { ...base, action: "ignore", sessionRowId: null, driverId: null, message: `Ignore Entry - ${message}` };
+        matched = { id: driver.id, name: driver.name, message: [`No ${carClass || "class"} Entrant`, message].filter(Boolean).join("; ") };
+      }
+
+      const { sessionRowId, message: sessionMsg } = matchSession(matched.id, sessionList);
+      const warning = [matched.message, sessionMsg].filter(Boolean).join("; ");
       const action: Action = sessionRowId != null ? "update" : "new";
       const label = action === "update" ? "Update existing Session entry" : "Add new Session entry";
       return {
-        action, sessionRowId, driverId: driver.id, driverName: driver.name, carClass, carNumber, position, bestLap,
+        ...base, action, sessionRowId, driverId: matched.id, driverName: matched.name,
         message: warning ? `${label} - ${warning}` : label,
       };
     });
 
-    const order: Record<Action, number> = { ignore: 0, new: 1, update: 2 };
+    const order: Record<Action, number> = { confirm: 0, ignore: 1, new: 2, update: 3 };
     extracted.sort((a, b) => order[a.action] - order[b.action] || a.position - b.position);
 
     setRows(extracted);
@@ -250,6 +353,23 @@ export function SessionImportPage() {
     });
   }, [rows]);
 
+  // One prompt per distinct file name + class + suggested driver
+  const pendingMatches = useMemo(() => {
+    const seen = new Set<string>();
+    return rows.filter((r) => {
+      if (r.action !== "confirm" || !r.suggestion || seen.has(r.suggestion.key)) return false;
+      seen.add(r.suggestion.key);
+      return true;
+    });
+  }, [rows]);
+
+  function decideMatches(targets: ExtractedRow[], decision: "accept" | "reject") {
+    const next = { ...fuzzyDecisions };
+    for (const r of targets) if (r.suggestion) next[r.suggestion.key] = decision;
+    setFuzzyDecisions(next);
+    processJson(rawJson, drivers, sessions, entrants, next);
+  }
+
   function updateDraft(key: string, field: keyof NewDriverDraft, value: string) {
     setDrafts((d) => ({ ...d, [key]: { ...d[key], [field]: value } }));
   }
@@ -274,6 +394,7 @@ export function SessionImportPage() {
         driverid: driverId,
         vehicleid: null,
         number: row.carNumber,
+        carclass: row.carClass,
         defaulttire: "",
         active: 1,
         master: 0,
@@ -290,14 +411,18 @@ export function SessionImportPage() {
       const err = await createDriver(row);
       if (err) errors.push(err);
     }
-    const { driverList, sessionList } = await load();
-    processJson(rawJson, driverList, sessionList);
+    const { driverList, sessionList, entrantList } = await load();
+    processJson(rawJson, driverList, sessionList, entrantList);
     setAdding(false);
     if (errors.length) setStatus(errors.join(" · "));
   }
 
   async function handleProcessImport() {
     if (!eventId) return;
+    if (pendingMatches.length > 0) {
+      setStatus("Confirm or reject the suggested driver matches before loading");
+      return;
+    }
     const entry = (r: ExtractedRow) => ({
       carClass: r.carClass || null,
       carNumber: r.carNumber || null,
@@ -333,6 +458,7 @@ export function SessionImportPage() {
   }
 
   const counts = useMemo(() => ({
+    confirm: rows.filter((r) => r.action === "confirm").length,
     new: rows.filter((r) => r.action === "new").length,
     update: rows.filter((r) => r.action === "update").length,
     ignore: rows.filter((r) => r.action === "ignore").length,
@@ -372,7 +498,38 @@ export function SessionImportPage() {
           {status} · <span className="text-green-700">{counts.new} new</span> ·{" "}
           <span className="text-blue-700">{counts.update} update</span> ·{" "}
           <span className="text-red-500">{counts.ignore} ignored</span>
+          {counts.confirm > 0 && <> · <span className="text-amber-600">{counts.confirm} to confirm</span></>}
         </p>
+
+        {pendingMatches.length > 0 && (
+          <div className="flex-shrink-0 max-h-[40%] overflow-auto border border-amber-300 bg-amber-50 rounded-lg p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-amber-800">
+                {pendingMatches.length} name{pendingMatches.length > 1 ? "s" : ""} closely match an Entrant in the same class — is this the same driver?
+              </span>
+              {pendingMatches.length > 1 && (
+                <Btn onClick={() => decideMatches(pendingMatches, "accept")}>Accept All</Btn>
+              )}
+            </div>
+            <div className="grid grid-cols-[200px_70px_1fr_90px_150px] gap-2 items-center">
+              {["From file", "Class", "Entrant", "Similarity", ""].map((h) => (
+                <span key={h} className="text-[10px] uppercase tracking-widest text-amber-700">{h}</span>
+              ))}
+              {pendingMatches.map((r) => (
+                <div key={r.suggestion!.key} className="contents">
+                  <span className="text-xs text-gray-800 truncate">{r.driverName}</span>
+                  <span className="text-xs text-gray-500">{r.carClass}</span>
+                  <span className="text-xs text-gray-800 truncate">{r.suggestion!.entrantName}</span>
+                  <span className="text-xs text-gray-500">{Math.round(r.suggestion!.score * 100)}%</span>
+                  <div className="flex gap-1.5">
+                    <Btn onClick={() => decideMatches([r], "accept")}>Accept</Btn>
+                    <Btn danger onClick={() => decideMatches([r], "reject")}>Reject</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {missingDrivers.length > 0 && (
           <div className="flex-shrink-0 max-h-[40%] overflow-auto border border-amber-300 bg-amber-50 rounded-lg p-3 flex flex-col gap-2">

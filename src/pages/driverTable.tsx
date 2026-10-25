@@ -20,6 +20,9 @@ const EMPTY_DRIVERS: Driver[] = [];
 const EMPTY_NEW = { firstname: "", lastname: "", suffix: "", active: true as boolean };
 const GRID = "grid grid-cols-[60px_1fr_1fr_100px_70px_180px] items-center px-4";
 
+type SortKey = "firstname" | "lastname";
+type Sort = { key: SortKey; dir: "asc" | "desc" } | null;
+
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
   if (value === false || value === 0) return "No";
@@ -33,6 +36,24 @@ export function DriverTablePage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Driver>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
+  const [sort, setSort] = useState<Sort>({ key: "lastname", dir: "asc" });
+
+  // Click cycles a column: A–Z, Z–A, then back to the original order
+  function toggleSort(key: SortKey) {
+    setSort((s) =>
+      s?.key !== key ? { key, dir: "asc" } : s.dir === "asc" ? { key, dir: "desc" } : null
+    );
+  }
+
+  function sortHeader(key: SortKey, label: string) {
+    const arrow = sort?.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
+    return (
+      <button type="button" className="uppercase tracking-widest hover:text-gray-700"
+        onClick={() => toggleSort(key)}>
+        {label}{arrow}
+      </button>
+    );
+  }
 
   async function load() {
     setLoading(true);
@@ -90,7 +111,7 @@ export function DriverTablePage() {
           ),
         }),
         col.accessor("firstname", {
-          header: "First Name",
+          header: () => sortHeader("firstname", "First Name"),
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Inp key={`firstname-${editingId}`} defaultValue={editRef.current.firstname ?? ""}
@@ -100,7 +121,7 @@ export function DriverTablePage() {
             ),
         }),
         col.accessor("lastname", {
-          header: "Last Name",
+          header: () => sortHeader("lastname", "Last Name"),
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Inp key={`lastname-${editingId}`} defaultValue={editRef.current.lastname ?? ""}
@@ -157,10 +178,19 @@ export function DriverTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId]
+    [editingId, sort]
   );
 
-  const table = useTable({ features, columns, data });
+  // Ties on the sorted name fall back to the other name
+  const sortedData = useMemo(() => {
+    if (!sort) return data;
+    const other: SortKey = sort.key === "firstname" ? "lastname" : "firstname";
+    const cmp = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...data].sort((a, b) => dir * (cmp(a[sort.key], b[sort.key]) || cmp(a[other], b[other])));
+  }, [data, sort]);
+
+  const table = useTable({ features, columns, data: sortedData });
 
   return (
     <div className="max-w-4xl h-full flex flex-col gap-4">
