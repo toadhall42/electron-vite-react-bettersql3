@@ -1,6 +1,11 @@
 import type { QueryResponse } from "../../../global";
 import log from "../logger";
-import { DatabaseError, NotFoundError, ValidationError } from "./errors";
+import {
+  BackupError,
+  DatabaseError,
+  NotFoundError,
+  ValidationError,
+} from "./errors";
 import { DrizzleQueryError } from "drizzle-orm";
 export const response = {
   ok: <T = any>(payload?: {
@@ -42,6 +47,9 @@ export const toErrorResponse = (err: unknown): QueryResponse => {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof ValidationError) {
+    return response.error({ code: err.code, message: err.message });
+  }
+  if (err instanceof BackupError) {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof DrizzleQueryError) {

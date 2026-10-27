@@ -1,5 +1,7 @@
 import { Outlet, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import logo from "@assets/race-car.svg";
+import { exportData, importData } from "@/lib/api/backup";
 
 const links = [
   { to: "/driverTable", label: "Drivers" },
@@ -14,6 +16,39 @@ const links = [
   { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];
+
+function DataBackup() {
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (action: typeof exportData | typeof importData, done: string) => {
+    setBusy(true);
+    setStatus(null);
+    const res = await action();
+    setBusy(false);
+    if (res.code !== 200) setStatus(res.message);
+    else if (res.message !== "canceled") setStatus(done);
+  };
+
+  const buttonClass =
+    "text-left text-xs tracking-wide px-2 py-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors disabled:opacity-50";
+
+  return (
+    <div className="flex flex-col gap-1 mb-4">
+      <button className={buttonClass} disabled={busy} onClick={() => run(exportData, "Exported")}>
+        Export Data
+      </button>
+      <button
+        className={buttonClass}
+        disabled={busy}
+        onClick={() => run(importData, "Imported — restarting…")}
+      >
+        Import Data
+      </button>
+      {status && <div className="px-2 text-[10px] text-gray-400">{status}</div>}
+    </div>
+  );
+}
 
 export function RootLayout() {
   return (
@@ -44,8 +79,9 @@ export function RootLayout() {
         ))}
 
         {/* Bottom */}
-        <div className="mt-auto px-2">
-          <div className="text-[10px] text-gray-400 uppercase tracking-widest">
+        <div className="mt-auto">
+          <DataBackup />
+          <div className="px-2 text-[10px] text-gray-400 uppercase tracking-widest">
             v0.0.1 · dev
           </div>
         </div>

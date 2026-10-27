@@ -6,3 +6,4 @@ export * from "./event.handler";
 export * from "./result.handler";
 export * from "./session.handler";
 export * from "./weather.handler";
+export * from "./backup.handler";

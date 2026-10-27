@@ -37,3 +37,15 @@ export class ValidationError extends Error {
     }
   }
 }
+export class BackupError extends Error {
+  code = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "BackupError";
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, BackupError);
+    }
+  }
+}

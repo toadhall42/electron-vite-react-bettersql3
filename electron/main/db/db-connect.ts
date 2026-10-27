@@ -15,16 +15,17 @@ const dirname = getDirname(import.meta.url);
 const dbPath = getDbPath();
 mkdirSync(path.dirname(dbPath), { recursive: true });
 
-const sqlite = new Database(dbPath, {
+export const sqlite: Database.Database = new Database(dbPath, {
   timeout: DB_CONFIG.timeout,
 });
 
 export let db: BetterSQLite3Database<typeof schema>;
 
+export const migrationsDir = isProd
+  ? path.join(process.resourcesPath, "migrations")
+  : path.join(dirname, "../migrations");
+
 export const dbConnect = async () => {
-  const migrationsDir = isProd
-    ? path.join(process.resourcesPath, "migrations")
-    : path.join(dirname, "../migrations");
   db = drizzle(sqlite, { schema });
 
   try {
