@@ -5,11 +5,13 @@ import {
 } from "@tanstack/react-table";
 import { getAllSessions, addSession, updateSession, deleteSession } from "@/lib/api/session";
 import { getAllDrivers } from "@/lib/api/driver";
+import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
+  type EntrantWithDetails,
   type EventWithDetails,
   type Season,
   type Session,
@@ -39,15 +41,27 @@ const EMPTY_NEW = {
   bestLap: "",
 };
 
-const SESSION_TYPES = ["Practice", "Qualify", "Race"] as const;
+const SESSION_TYPES = ["Practice", "Qualify", "Race", "Bonus Race"] as const;
 type SessionType = (typeof SESSION_TYPES)[number];
 
-// id  driver  event  class  car#  pos  best  actions
-const GRID = "grid grid-cols-[44px_1fr_200px_80px_60px_50px_100px_155px] items-center px-4";
+// id  driver  class  car#  pos  best  actions
+const GRID = "grid grid-cols-[44px_1fr_80px_60px_50px_100px_155px] items-center px-4";
+// Bonus races only track driver + class: id  driver  class  session  actions
+const BONUS_GRID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center px-4";
+const BONUS = "Bonus Race";
+const today = () => new Date().toISOString().slice(0, 10);
+const entrantClass = (e: EntrantWithDetails) => e.vehicleClass ?? e.carclass ?? "";
+// A driver with several cars appears once per Entrant
+const entrantLabel = (e: EntrantWithDetails) => {
+  const cls = entrantClass(e);
+  return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
+};
 
 export function SessionTablePage() {
   const [data, setData] = useState<SessionWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [entrants, setEntrants] = useState<EntrantWithDetails[]>([]);
+  const [newEntrantId, setNewEntrantId] = useState(0);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
@@ -62,15 +76,17 @@ export function SessionTablePage() {
 
   async function load() {
     setLoading(true);
-    const [sesRes, drvRes, evtRes, seaRes] = await Promise.all([
+    const [sesRes, drvRes, entRes, evtRes, seaRes] = await Promise.all([
       getAllSessions(),
       getAllDrivers(),
+      getAllEntrants(),
       getAllEvents(),
       getAllSeasons(),
     ]);
     setSeasons(((seaRes?.data as Season[]) ?? []).sort((a, b) => b.year - a.year));
     setData((sesRes?.data as SessionWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
+    setEntrants((entRes?.data as EntrantWithDetails[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
     setLoading(false);
   }
@@ -114,10 +130,52 @@ export function SessionTablePage() {
     load();
   }
 
+  // Choosing an Entrant fills the row's driver, class and car number
+  function pickEntrant(id: number) {
+    const en = entrants.find((e) => e.id === id);
+    setNewEntrantId(en?.id ?? 0);
+    setNewRow((v) => ({
+      ...v,
+      driverId: en?.driverid ?? 0,
+      carClass: en ? entrantClass(en) : "",
+      carNumber: en?.number ?? "",
+    }));
+  }
+
+  const entrantOptions = useMemo(
+    () => [...entrants].sort((a, b) =>
+      (a.driverLastName ?? "").localeCompare(b.driverLastName ?? "") ||
+      (a.driverFirstName ?? "").localeCompare(b.driverFirstName ?? "") ||
+      entrantClass(a).localeCompare(entrantClass(b))),
+    [entrants]
+  );
+
   async function create() {
-    await addSession(newRow as InsertSession);
-    setNewRow({ ...EMPTY_NEW });
+    if (!isBonus) {
+      await addSession(newRow as InsertSession);
+      setNewRow({ ...EMPTY_NEW });
+      setNewEntrantId(0);
+      await load();
+      return;
+    }
+    const name = newRow.name.trim();
+    if (bonusEventId == null || !newRow.driverId || !name) return;
+    // A bonus race has no start/finish/lap data; date comes from the event's existing sessions
+    const eventDates = data.filter((s) => s.eventId === bonusEventId).map((s) => s.sessionDate).sort();
+    await addSession({
+      ...EMPTY_NEW,
+      name,
+      sessionType: BONUS,
+      eventId: bonusEventId,
+      sessionDate: sessionTemplate?.sessionDate ?? eventDates.at(-1) ?? today(),
+      driverId: newRow.driverId,
+      carClass: newRow.carClass,
+    } as InsertSession);
+    setNewRow({ ...EMPTY_NEW, name });
+    setNewEntrantId(0);
     await load();
+    // Keep the (possibly new) bonus session selected so more drivers can be added
+    setNameFilter(name);
   }
 
   const seasonEvents = useMemo(
@@ -161,6 +219,17 @@ export function SessionTablePage() {
     [filteredData]
   );
   const sessionTemplate = isSingleSession ? filteredData[0] : null;
+
+  // Bonus race entry is open once an event is chosen, even before the session exists
+  const isBonus = typeFilter === BONUS;
+  const bonusEventId = eventFilter !== "" ? eventFilter : sessionTemplate?.eventId;
+  const canAddBonus = isBonus && bonusEventId != null;
+  const grid = isBonus ? BONUS_GRID : GRID;
+
+  // Default a new bonus row's name to the selected session
+  useEffect(() => {
+    if (isBonus) setNewRow((v) => ({ ...v, name: nameFilter }));
+  }, [isBonus, nameFilter]);
 
   // Class filter applies within the selected session, after the single-session check
   const classOptions = useMemo(
@@ -212,20 +281,6 @@ export function SessionTablePage() {
               <span className="text-gray-800 text-xs truncate block">{info.row.original.driverName ?? "—"}</span>
             ),
         }),
-        col.display({
-          id: "event",
-          header: "Event",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Sel key={`eventId-${editingId}`} defaultValue={editRef.current.eventId ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, eventId: Number(e.target.value) }; }}>
-                <option value="">— event —</option>
-                {events.map((e) => <option key={e.id} value={e.id}>#{e.number} {e.track}</option>)}
-              </Sel>
-            ) : (
-              <span className="text-gray-800 text-xs truncate block">{info.row.original.eventTrack ?? "—"}</span>
-            ),
-        }),
         col.accessor("carClass", {
           header: () => (
             <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}
@@ -242,6 +297,16 @@ export function SessionTablePage() {
               <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
         }),
+        ...(isBonus ? [col.accessor("name", {
+          header: "Session",
+          cell: (info) =>
+            editingId === info.row.original.id ? (
+              <Inp key={`name-${editingId}`} defaultValue={editRef.current.name ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, name: e.target.value }; }} />
+            ) : (
+              <span className="text-gray-500 text-xs truncate block">{info.getValue()}</span>
+            ),
+        })] : [
         col.accessor("carNumber", {
           header: "Car #",
           cell: (info) =>
@@ -272,6 +337,7 @@ export function SessionTablePage() {
               <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
         }),
+        ]),
         col.display({
           id: "actions",
           cell: (info) => {
@@ -291,7 +357,7 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, events, classFilter, classOptions]
+    [editingId, drivers, classFilter, classOptions, isBonus]
   );
 
   const table = useTable({ features, columns, data: displayData });
@@ -342,7 +408,7 @@ export function SessionTablePage() {
         <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[900px]">
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
+            <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {hg.headers.map((header) => (
                 <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                   <table.FlexRender header={header} />
@@ -352,12 +418,24 @@ export function SessionTablePage() {
           ))}
 
           {loading && <div className="py-10 text-center text-xs text-gray-400">Loading...</div>}
-          {!loading && filteredData.length === 0 && (
+          {!loading && isBonus && !canAddBonus && (
+            <div className="py-10 text-center text-xs text-gray-400">
+              Select an event to add Bonus Race entries
+            </div>
+          )}
+          {!loading && canAddBonus && !isSingleSession && (
+            <div className="py-10 text-center text-xs text-gray-400">
+              {filteredData.length === 0
+                ? "No Bonus Race entries yet — enter a name and add drivers below"
+                : "Select a Bonus Race by name, or enter a new name below"}
+            </div>
+          )}
+          {!loading && !isBonus && filteredData.length === 0 && (
             <div className="py-10 text-center text-xs text-gray-400">
               {data.length === 0 ? "No sessions" : "No sessions match the selected filters"}
             </div>
           )}
-          {!loading && filteredData.length > 0 && !isSingleSession && (
+          {!loading && !isBonus && filteredData.length > 0 && !isSingleSession && (
             <div className="py-10 text-center text-xs text-gray-400">
               Select filters down to a single session
             </div>
@@ -366,7 +444,7 @@ export function SessionTablePage() {
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
-                className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+                className={`${grid} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
               >
                 {row.getAllCells().map((cell) => (
                   <div key={cell.id} className="min-w-0 overflow-hidden">
@@ -377,18 +455,30 @@ export function SessionTablePage() {
             ))}
 
           {/* Add new row */}
-          {!loading && isSingleSession && (
-            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
+          {!loading && canAddBonus && (
+            <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
               <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
-              <Sel value={newRow.driverId || ""}
-                onChange={(e) => setNewRow((v) => ({ ...v, driverId: Number(e.target.value) }))}>
-                <option value="">— driver —</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
+                <option value="">— entrant —</option>
+                {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}
               </Sel>
-              <Sel value={newRow.eventId || ""}
-                onChange={(e) => setNewRow((v) => ({ ...v, eventId: Number(e.target.value) }))}>
-                <option value="">— event —</option>
-                {events.map((e) => <option key={e.id} value={e.id}>#{e.number} {e.track}</option>)}
+              <Inp value={newRow.carClass} placeholder="class"
+                onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
+              {/* Pick an existing bonus race name or type a new one */}
+              <Inp value={newRow.name} placeholder="bonus race name" list="bonus-race-names"
+                onChange={(e) => setNewRow((v) => ({ ...v, name: e.target.value }))} />
+              <datalist id="bonus-race-names">
+                {sessionNames.map((n) => <option key={n} value={n} />)}
+              </datalist>
+              <Btn onClick={create}>Add</Btn>
+            </div>
+          )}
+          {!loading && !isBonus && isSingleSession && (
+            <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
+              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+              <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
+                <option value="">— entrant —</option>
+                {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}
               </Sel>
               <Inp value={newRow.carClass} placeholder="class"
                 onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />

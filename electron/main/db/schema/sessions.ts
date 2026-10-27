@@ -6,7 +6,7 @@ import {
   createUpdateSchema,
 } from "drizzle-zod";
 
-export const SESSION_TYPES = ["Practice", "Qualify", "Race"] as const;
+export const SESSION_TYPES = ["Practice", "Qualify", "Race", "Bonus Race"] as const;
 export type SessionType = (typeof SESSION_TYPES)[number];
 
 // One row per driver per session. A session itself is identified by
