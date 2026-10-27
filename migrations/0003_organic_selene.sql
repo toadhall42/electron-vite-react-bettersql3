@@ -1,0 +1,1 @@
+ALTER TABLE `drivers` ADD `lasttname` text NOT NULL;

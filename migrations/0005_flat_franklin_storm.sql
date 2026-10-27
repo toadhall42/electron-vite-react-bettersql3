@@ -1,0 +1,1 @@
+ALTER TABLE `drivers` ADD `active` integer DEFAULT 1 NOT NULL;

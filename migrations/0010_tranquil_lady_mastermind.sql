@@ -1,0 +1,20 @@
+CREATE TABLE `results` (
+	`id` integer PRIMARY KEY NOT NULL,
+	`driverId` integer NOT NULL,
+	`carClass` text,
+	`eventId` integer NOT NULL,
+	`sessionId` text,
+	`positionOverall` integer DEFAULT 0 NOT NULL,
+	`positionInClass` integer DEFAULT 0 NOT NULL,
+	`positionsGained` integer DEFAULT 0 NOT NULL,
+	`startingPosition` integer DEFAULT 0 NOT NULL,
+	`hardCharger` integer DEFAULT false NOT NULL,
+	`racePoints` integer DEFAULT 0 NOT NULL,
+	`bonusPoints` integer DEFAULT 0 NOT NULL,
+	`mastersPoints` integer DEFAULT 0 NOT NULL,
+	`totalPoints` integer DEFAULT 0 NOT NULL,
+	`bonusRacePoints` integer DEFAULT 0 NOT NULL,
+	`tireBrand` text,
+	`classification` text,
+	`comments` text
+);

@@ -1,0 +1,1 @@
+ALTER TABLE `entrants` ADD `carclass` text;
