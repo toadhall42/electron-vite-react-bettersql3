@@ -49,3 +49,15 @@ export class BackupError extends Error {
     }
   }
 }
+export class ConflictError extends Error {
+  code = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ConflictError);
+    }
+  }
+}

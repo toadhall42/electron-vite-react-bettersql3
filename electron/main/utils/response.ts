@@ -2,6 +2,7 @@ import type { QueryResponse } from "../../../global";
 import log from "../logger";
 import {
   BackupError,
+  ConflictError,
   DatabaseError,
   NotFoundError,
   ValidationError,
@@ -50,6 +51,9 @@ export const toErrorResponse = (err: unknown): QueryResponse => {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof BackupError) {
+    return response.error({ code: err.code, message: err.message });
+  }
+  if (err instanceof ConflictError) {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof DrizzleQueryError) {

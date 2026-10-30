@@ -51,3 +51,13 @@ ipcMain.handle("db/session/update", (_event, arg): QueryResponse => {
     return toErrorResponse(err);
   }
 });
+
+ipcMain.handle("db/session/updateGroup", (_event, arg): QueryResponse => {
+  try {
+    SessionService.updateGroup(arg.key, arg.data);
+    return response.ok();
+  } catch (err: unknown) {
+    log.error("[SESSION HANDLER] session/updateGroup failed", { arg, err });
+    return toErrorResponse(err);
+  }
+});

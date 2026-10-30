@@ -1,12 +1,12 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { db } from "../db-connect";
-import { seasons } from "../schema";
+import { events, seasons } from "../schema";
 import {
   InsertSeasonModel,
   UpdateSeasonModel,
   type Season,
 } from "../schema/seasons";
-import { ValidationError, NotFoundError } from "../../utils/errors";
+import { ValidationError, NotFoundError, ConflictError } from "../../utils/errors";
 
 export class SeasonService {
   static getAll(): Season[] {
@@ -21,6 +21,11 @@ export class SeasonService {
 
   static delete(id: number) {
     return db.transaction((tx) => {
+      // Events would be orphaned, so they must be deleted or moved first
+      const [{ n }] = tx.select({ n: count() }).from(events).where(eq(events.seasonId, id)).all();
+      if (n > 0) {
+        throw new ConflictError(`Season has ${n} event${n === 1 ? "" : "s"}; delete or move them first`);
+      }
       const result = tx.delete(seasons).where(eq(seasons.id, id)).run();
       if (result.changes === 0) {
         tx.rollback();

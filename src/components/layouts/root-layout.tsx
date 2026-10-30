@@ -8,7 +8,6 @@ const links = [
   { to: "/vehicleTable", label: "Vehicles" },
   { to: "/entrantTable", label: "Entrants" },
   { to: "/seasonTable", label: "Seasons" },
-  { to: "/eventTable", label: "Events" },
   { to: "/sessionTable", label: "Session Results" },
   { to: "/sessionImport", label: "Import Sessions" },
   { to: "/resultTable", label: "Points" },

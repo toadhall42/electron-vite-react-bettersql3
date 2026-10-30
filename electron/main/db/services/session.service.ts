@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db-connect";
 import { sessions, drivers, events } from "../schema";
 import {
   InsertSessionModel,
   UpdateSessionModel,
+  type Session,
   type SessionWithDetails,
 } from "../schema/sessions";
 import { ValidationError, NotFoundError } from "../../utils/errors";
@@ -30,6 +31,33 @@ const withDetails = () =>
     .from(sessions)
     .leftJoin(drivers, eq(sessions.driverId, drivers.id))
     .leftJoin(events, eq(sessions.eventId, events.id));
+
+// Identifies a session group: the driver rows sharing event + type + name + date + start time
+export type SessionGroupKey = Pick<
+  Session,
+  "eventId" | "sessionType" | "name" | "sessionDate" | "sessionStartTime"
+>;
+
+// Only the fields shared by every driver row of a session can be edited as a group
+const GroupUpdateModel = UpdateSessionModel.pick({
+  name: true,
+  sessionType: true,
+  sessionDate: true,
+  sessionStartTime: true,
+  eventSequence: true,
+  seasonRaceNumber: true,
+});
+
+const matchGroup = (k: SessionGroupKey) =>
+  and(
+    eq(sessions.eventId, k.eventId),
+    eq(sessions.sessionType, k.sessionType),
+    eq(sessions.name, k.name),
+    eq(sessions.sessionDate, k.sessionDate),
+    k.sessionStartTime == null
+      ? isNull(sessions.sessionStartTime)
+      : eq(sessions.sessionStartTime, k.sessionStartTime)
+  );
 
 export class SessionService {
   static getAll(): SessionWithDetails[] {
@@ -74,6 +102,19 @@ export class SessionService {
       if (r.changes === 0) {
         tx.rollback();
         throw new Error("insert failed");
+      }
+    });
+  }
+
+  static updateGroup(key: SessionGroupKey, data: unknown) {
+    const parsed = GroupUpdateModel.safeParse(data);
+    if (!parsed.success) throw new ValidationError(parsed.error);
+
+    return db.transaction((tx) => {
+      const r = tx.update(sessions).set(parsed.data).where(matchGroup(key)).run();
+      if (r.changes === 0) {
+        tx.rollback();
+        throw new NotFoundError("Session not found");
       }
     });
   }
