@@ -15,7 +15,9 @@ export const entrants = sqliteTable("entrants", {
   defaulttire: text().notNull(),
   active: integer().notNull().default(1),
   notes: text(),
-  master: integer().notNull().default(0),
+  // Season year from which the driver scores Masters points (65 before that season's first race).
+  // Eligibility carries into every later season.
+  firstMasterSeason: integer(),
 });
 
 export const EntrantModel = createSelectSchema(entrants);

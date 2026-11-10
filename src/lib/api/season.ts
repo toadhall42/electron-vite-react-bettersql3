@@ -1,14 +1,14 @@
-import type { InsertSeason, UpdateSeason, Season } from "../../../global.d";
+import type { InsertSeason, UpdateSeason, SeasonWithDetails } from "../../../global.d";
 
 export const getSeason = async (id: number) => {
-  return window.api.db<Season>({
+  return window.api.db<SeasonWithDetails>({
     path: "db/season/getOne",
     params: { id },
   });
 };
 
 export const getAllSeasons = async () => {
-  return window.api.db<Season[]>({
+  return window.api.db<SeasonWithDetails[]>({
     path: "db/season/getAll",
     params: {},
   });

@@ -27,8 +27,14 @@ import { Sel } from "@/components/common/select";
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, EntrantWithDetails>();
 const EMPTY: EntrantWithDetails[] = [];
-const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "", master: 0 };
-const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_60px_170px] items-center px-4";
+const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "", firstMasterSeason: null as number | null };
+const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_90px_170px] items-center px-4";
+
+// Blank clears the year rather than storing 0
+const optYear = (v: string) => {
+  const digits = v.replace(/\D/g, "");
+  return digits === "" ? null : Number(digits);
+};
 
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
@@ -77,7 +83,7 @@ export function EntrantTablePage() {
       defaulttire: row.defaulttire,
       active: row.active,
       notes: row.notes,
-      master: row.master,
+      firstMasterSeason: row.firstMasterSeason,
     };
     setEditVehicleId(row.vehicleid || null);
     setEditingId(row.id);
@@ -223,17 +229,16 @@ export function EntrantTablePage() {
               <span className="text-gray-500 text-xs truncate">{info.getValue() ?? ""}</span>
             ),
         }),
-        col.accessor("master", {
-          header: "Master",
+        // Season year the driver first scores Masters points; blank = not a Master
+        col.accessor("firstMasterSeason", {
+          header: "Master Since",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <input key={`master-${editingId}`} type="checkbox"
-                defaultChecked={(editRef.current.master as unknown) === 1}
-                onChange={(e) => { editRef.current = { ...editRef.current, master: e.target.checked ? 1 : 0 }; }}
-                className="w-4 h-4 accent-gray-600 cursor-pointer"
-              />
+              <Inp key={`firstMasterSeason-${editingId}`} placeholder="year" inputMode="numeric"
+                defaultValue={editRef.current.firstMasterSeason == null ? "" : String(editRef.current.firstMasterSeason)}
+                onChange={(e) => { editRef.current = { ...editRef.current, firstMasterSeason: optYear(e.target.value) }; }} />
             ) : (
-              <span className="text-gray-500 text-xs">{fmtActive(info.getValue())}</span>
+              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
             ),
         }),
         col.display({
@@ -372,11 +377,11 @@ export function EntrantTablePage() {
                 placeholder="notes"
                 onChange={(e) => setNewRow((v) => ({ ...v, notes: e.target.value }))}
               />
-              <input
-                type="checkbox"
-                checked={newRow.master === 1}
-                onChange={(e) => setNewRow((v) => ({ ...v, master: e.target.checked ? 1 : 0 }))}
-                className="w-4 h-4 accent-gray-600 cursor-pointer"
+              <Inp
+                value={newRow.firstMasterSeason == null ? "" : String(newRow.firstMasterSeason)}
+                placeholder="master since"
+                inputMode="numeric"
+                onChange={(e) => setNewRow((v) => ({ ...v, firstMasterSeason: optYear(e.target.value) }))}
               />
               <Btn onClick={create}>Add</Btn>
             </div>

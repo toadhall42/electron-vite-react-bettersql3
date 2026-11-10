@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db-connect";
-import { events, seasons } from "../schema";
+import { events, pointModels, seasons } from "../schema";
 import {
   InsertEventModel,
   UpdateEventModel,
@@ -17,11 +17,13 @@ const withDetails = () =>
       dates: events.dates,
       number: events.number,
       seasonId: events.seasonId,
-      pointModel: events.pointModel,
+      pointModelId: events.pointModelId,
       seasonName: seasons.name,
+      pointModelName: pointModels.name,
     })
     .from(events)
-    .leftJoin(seasons, eq(events.seasonId, seasons.id));
+    .leftJoin(seasons, eq(events.seasonId, seasons.id))
+    .leftJoin(pointModels, eq(events.pointModelId, pointModels.id));
 
 export class EventService {
   static getAll(): EventWithDetails[] {

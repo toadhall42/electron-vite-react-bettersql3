@@ -1,9 +1,12 @@
 import { getAllSeasons, addSeason, updateSeason, deleteSeason } from "@/lib/api/season";
 import { getAllEvents, addEvent, updateEvent, deleteEvent } from "@/lib/api/event";
 import { getAllSessions, updateSessionGroup, type SessionGroupKey } from "@/lib/api/session";
+import { getAllPointModels } from "@/lib/api/pointModel";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Season,
+  type SeasonWithDetails,
+  type PointModel,
   type InsertSeason,
   type UpdateSeason,
   type Event,
@@ -18,22 +21,22 @@ import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { Sel } from "@/components/common/select";
 
-const EMPTY_SEASON = { name: "", year: new Date().getFullYear() };
+const EMPTY_SEASON: InsertSeason = { name: "", year: new Date().getFullYear(), pointModelId: null };
 const EMPTY_EVENT: Omit<InsertEvent, "id"> = {
   track: "",
   sanction: "",
   dates: "",
   number: 1,
   seasonId: 0,
-  pointModel: "",
+  pointModelId: null,
 };
 
 // Each level indents further; header labels line up with their own level's grid.
-// Season: id  name  year  events  actions
-const SEASON_GRID = "grid grid-cols-[60px_1fr_100px_90px_250px] items-center gap-2 px-4";
+// Season: id  name  year  point model  events  actions
+const SEASON_GRID = "grid grid-cols-[60px_1fr_100px_200px_90px_250px] items-center gap-2 px-4";
 // Event: id  track  sanction  dates  num  point model  actions
 const EVENT_GRID =
-  "grid grid-cols-[130px_1fr_100px_130px_60px_120px_170px] items-center gap-2 pl-10 pr-4";
+  "grid grid-cols-[130px_1fr_100px_130px_60px_180px_170px] items-center gap-2 pl-10 pr-4";
 // Session: indent  type  name  date  start  seq  race#  drivers  actions
 const SESSION_GRID =
   "grid grid-cols-[50px_120px_1fr_120px_90px_60px_60px_70px_170px] items-center gap-2 pl-24 pr-4";
@@ -57,12 +60,24 @@ const sessionSort = (s: Session) =>
 
 // Events whose season is missing are listed under a pseudo-season so they never vanish
 const UNASSIGNED = 0;
-type SeasonGroup = { id: number; season: Season | null; events: EventWithDetails[] };
+type SeasonGroup = { id: number; season: SeasonWithDetails | null; events: EventWithDetails[] };
 
 type Editing = { kind: "season" | "event" | "session"; key: string } | null;
 
 // Blank numeric inputs clear the field rather than storing 0
 const optNum = (v: string) => (v.trim() === "" ? null : Number(v));
+
+function PointModelSelect({ models, blank, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & {
+  models: PointModel[];
+  blank: string;
+}) {
+  return (
+    <Sel {...props}>
+      <option value="">{blank}</option>
+      {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+    </Sel>
+  );
+}
 
 function Toggle({ open, disabled, onClick, children }: {
   open: boolean;
@@ -84,7 +99,8 @@ function Toggle({ open, disabled, onClick, children }: {
 }
 
 export function SeasonTablePage() {
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasons, setSeasons] = useState<SeasonWithDetails[]>([]);
+  const [pointModels, setPointModels] = useState<PointModel[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
   const [sessions, setSessions] = useState<SessionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,13 +119,15 @@ export function SeasonTablePage() {
 
   async function load() {
     setLoading(true);
-    const [snRes, evRes, sesRes] = await Promise.all([
+    const [snRes, evRes, sesRes, pmRes] = await Promise.all([
       getAllSeasons(),
       getAllEvents(),
       getAllSessions(),
+      getAllPointModels(),
     ]);
-    const sn = (snRes?.data as Season[]) ?? [];
+    const sn = (snRes?.data as SeasonWithDetails[]) ?? [];
     setSeasons(sn);
+    setPointModels(((pmRes?.data as PointModel[]) ?? []).sort((a, b) => a.name.localeCompare(b.name)));
     setEvents((evRes?.data as EventWithDetails[]) ?? []);
     setSessions((sesRes?.data as SessionWithDetails[]) ?? []);
     // Open the newest season on first visit
@@ -197,12 +215,12 @@ export function SeasonTablePage() {
   // --- seasons ---
   function startSeasonEdit(s: Season) {
     cancelEdit();
-    seasonEditRef.current = { name: s.name, year: s.year };
+    seasonEditRef.current = { name: s.name, year: s.year, pointModelId: s.pointModelId };
     setEditing({ kind: "season", key: String(s.id) });
   }
 
   async function createSeason() {
-    if (await run(() => addSeason(newSeason as InsertSeason))) setNewSeason({ ...EMPTY_SEASON });
+    if (await run(() => addSeason(newSeason))) setNewSeason({ ...EMPTY_SEASON });
   }
 
   // --- events ---
@@ -214,7 +232,7 @@ export function SeasonTablePage() {
       dates: e.dates,
       number: e.number,
       seasonId: e.seasonId,
-      pointModel: e.pointModel,
+      pointModelId: e.pointModelId,
     };
     setEditing({ kind: "event", key: String(e.id) });
   }
@@ -226,7 +244,7 @@ export function SeasonTablePage() {
       seasonId: g.id,
       number: (last?.number ?? 0) + 1,
       sanction: last?.sanction ?? "",
-      pointModel: last?.pointModel ?? "",
+      pointModelId: last?.pointModelId ?? null,
     });
     setAddingTo(g.id);
     setOpenSeasons((prev) => new Set(prev).add(g.id));
@@ -281,6 +299,13 @@ export function SeasonTablePage() {
               defaultValue={String(ref.current.year ?? "")}
               onChange={(e) => { ref.current = { ...ref.current, year: Number(e.target.value) }; }}
             />
+            <PointModelSelect
+              key={`smodel-${s.id}`}
+              models={pointModels}
+              blank="— point model —"
+              defaultValue={ref.current.pointModelId ?? ""}
+              onChange={(e) => { ref.current = { ...ref.current, pointModelId: optNum(e.target.value) }; }}
+            />
           </>
         ) : (
           <>
@@ -288,6 +313,9 @@ export function SeasonTablePage() {
               {s?.name ?? "Unassigned"}
             </span>
             <span className="text-gray-500 text-xs">{s?.year ?? ""}</span>
+            <span className={`text-xs truncate ${s?.pointModelName ? "text-gray-600" : "text-amber-600"}`}>
+              {s == null ? "" : s.pointModelName ?? "no point model"}
+            </span>
           </>
         )}
         <span className="text-gray-400 text-xs">{g.events.length} events</span>
@@ -362,10 +390,12 @@ export function SeasonTablePage() {
                 defaultValue={String(ref.current.number ?? "")}
                 onChange={(ev) => { ref.current = { ...ref.current, number: Number(ev.target.value) }; }}
               />
-              <Inp
+              <PointModelSelect
                 key={`pointModel-${e.id}`}
-                defaultValue={ref.current.pointModel ?? ""}
-                onChange={(ev) => { ref.current = { ...ref.current, pointModel: ev.target.value }; }}
+                models={pointModels}
+                blank="season default"
+                defaultValue={ref.current.pointModelId ?? ""}
+                onChange={(ev) => { ref.current = { ...ref.current, pointModelId: optNum(ev.target.value) }; }}
               />
               <div className="flex gap-1.5">
                 <Btn onClick={() => run(() => updateEvent(e.id, ref.current as UpdateEvent))}>Save</Btn>
@@ -378,7 +408,9 @@ export function SeasonTablePage() {
               <span className="text-gray-500 text-xs truncate">{e.sanction}</span>
               <span className="text-gray-500 text-xs truncate">{e.dates}</span>
               <span className="text-gray-500 text-xs">{e.number}</span>
-              <span className="text-gray-500 text-xs truncate">{e.pointModel}</span>
+              {e.pointModelName
+                ? <span className="text-gray-800 text-xs truncate" title="Overrides the season's point model">{e.pointModelName}</span>
+                : <span className="text-gray-400 text-xs truncate">season default</span>}
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEventEdit(e)}>Edit</Btn>
                 <Btn danger onClick={() => removeEvent(e)}>Delete</Btn>
@@ -422,10 +454,11 @@ export function SeasonTablePage() {
           placeholder="num"
           onChange={(e) => setNewEvent((v) => ({ ...v, number: Number(e.target.value) }))}
         />
-        <Inp
-          value={newEvent.pointModel}
-          placeholder="point model"
-          onChange={(e) => setNewEvent((v) => ({ ...v, pointModel: e.target.value }))}
+        <PointModelSelect
+          models={pointModels}
+          blank="season default"
+          value={newEvent.pointModelId ?? ""}
+          onChange={(e) => setNewEvent((v) => ({ ...v, pointModelId: optNum(e.target.value) }))}
         />
         <div className="flex gap-1.5">
           <Btn onClick={createEvent}>Add</Btn>
@@ -535,7 +568,7 @@ export function SeasonTablePage() {
       <div className="flex-1 flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white min-h-0">
         {/* Header */}
         <div className={`${SEASON_GRID} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
-          {["ID", "Season", "Year", "Events", ""].map((h, i) => (
+          {["ID", "Season", "Year", "Point Model", "Events", ""].map((h, i) => (
             <span key={i} className={LABEL}>{h}</span>
           ))}
         </div>
@@ -581,6 +614,12 @@ export function SeasonTablePage() {
               value={String(newSeason.year)}
               placeholder="year"
               onChange={(e) => setNewSeason((v) => ({ ...v, year: Number(e.target.value) }))}
+            />
+            <PointModelSelect
+              models={pointModels}
+              blank="— point model —"
+              value={newSeason.pointModelId ?? ""}
+              onChange={(e) => setNewSeason((v) => ({ ...v, pointModelId: optNum(e.target.value) }))}
             />
             <span />
             <div>

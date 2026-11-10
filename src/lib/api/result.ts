@@ -35,9 +35,18 @@ export const updateResult = async (id: number, data: UpdateResult) => {
   });
 };
 
+export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number };
+
 export const calculateResultsForEvent = async (eventId: number) => {
-  return window.api.db<{ races: number; inserted: number; updated: number }>({
+  return window.api.db<CalculateResultsSummary>({
     path: "db/result/calculateForEvent",
     params: { eventId },
+  });
+};
+
+export const calculateResultsForSeason = async (seasonId: number) => {
+  return window.api.db<CalculateResultsSummary>({
+    path: "db/result/calculateForSeason",
+    params: { seasonId },
   });
 };

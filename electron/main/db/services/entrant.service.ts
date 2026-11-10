@@ -19,7 +19,7 @@ const withDetails = () =>
       defaulttire: entrants.defaulttire,
       active: entrants.active,
       notes: entrants.notes,
-      master: entrants.master,
+      firstMasterSeason: entrants.firstMasterSeason,
       driverName: drivers.name,
       driverFirstName: drivers.firstname,
       driverLastName: drivers.lastname,

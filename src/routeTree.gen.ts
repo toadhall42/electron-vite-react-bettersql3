@@ -14,6 +14,7 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as DriverTableRouteImport } from './routes/driverTable'
 import { Route as EntrantTableRouteImport } from './routes/entrantTable'
 import { Route as FsRouteImport } from './routes/fs'
+import { Route as PointModelTableRouteImport } from './routes/pointModelTable'
 import { Route as ResultTableRouteImport } from './routes/resultTable'
 import { Route as SeasonTableRouteImport } from './routes/seasonTable'
 import { Route as SessionImportRouteImport } from './routes/sessionImport'
@@ -44,6 +45,11 @@ const EntrantTableRoute = EntrantTableRouteImport.update({
 const FsRoute = FsRouteImport.update({
   id: '/fs',
   path: '/fs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PointModelTableRoute = PointModelTableRouteImport.update({
+  id: '/pointModelTable',
+  path: '/pointModelTable',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResultTableRoute = ResultTableRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/driverTable': typeof DriverTableRoute
   '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
+  '/pointModelTable': typeof PointModelTableRoute
   '/resultTable': typeof ResultTableRoute
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/driverTable': typeof DriverTableRoute
   '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
+  '/pointModelTable': typeof PointModelTableRoute
   '/resultTable': typeof ResultTableRoute
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/driverTable': typeof DriverTableRoute
   '/entrantTable': typeof EntrantTableRoute
   '/fs': typeof FsRoute
+  '/pointModelTable': typeof PointModelTableRoute
   '/resultTable': typeof ResultTableRoute
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/driverTable'
     | '/entrantTable'
     | '/fs'
+    | '/pointModelTable'
     | '/resultTable'
     | '/seasonTable'
     | '/sessionImport'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/driverTable'
     | '/entrantTable'
     | '/fs'
+    | '/pointModelTable'
     | '/resultTable'
     | '/seasonTable'
     | '/sessionImport'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/driverTable'
     | '/entrantTable'
     | '/fs'
+    | '/pointModelTable'
     | '/resultTable'
     | '/seasonTable'
     | '/sessionImport'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   DriverTableRoute: typeof DriverTableRoute
   EntrantTableRoute: typeof EntrantTableRoute
   FsRoute: typeof FsRoute
+  PointModelTableRoute: typeof PointModelTableRoute
   ResultTableRoute: typeof ResultTableRoute
   SeasonTableRoute: typeof SeasonTableRoute
   SessionImportRoute: typeof SessionImportRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/fs'
       fullPath: '/fs'
       preLoaderRoute: typeof FsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pointModelTable': {
+      id: '/pointModelTable'
+      path: '/pointModelTable'
+      fullPath: '/pointModelTable'
+      preLoaderRoute: typeof PointModelTableRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/resultTable': {
@@ -261,6 +281,7 @@ const rootRouteChildren: RootRouteChildren = {
   DriverTableRoute: DriverTableRoute,
   EntrantTableRoute: EntrantTableRoute,
   FsRoute: FsRoute,
+  PointModelTableRoute: PointModelTableRoute,
   ResultTableRoute: ResultTableRoute,
   SeasonTableRoute: SeasonTableRoute,
   SessionImportRoute: SessionImportRoute,

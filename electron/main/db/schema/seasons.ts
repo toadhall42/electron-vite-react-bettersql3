@@ -10,6 +10,7 @@ export const seasons = sqliteTable("seasons", {
   id: integer().primaryKey(),
   name: text().notNull(),
   year: integer().notNull(),
+  pointModelId: integer(),
 });
 
 export const SeasonModel = createSelectSchema(seasons);
@@ -21,3 +22,7 @@ export const UpdateSeasonModel = createUpdateSchema(seasons);
 export type Season = z.infer<typeof SeasonModel>;
 export type InsertSeason = z.infer<typeof InsertSeasonModel>;
 export type UpdateSeason = z.infer<typeof UpdateSeasonModel>;
+
+export type SeasonWithDetails = Season & {
+  pointModelName: string | null;
+};

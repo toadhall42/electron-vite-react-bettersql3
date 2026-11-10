@@ -120,6 +120,34 @@
       "when": 1792894440509,
       "tag": "0016_dapper_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1794269947480,
+      "tag": "0017_point_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1794269968291,
+      "tag": "0018_drop_event_point_model_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1794271617059,
+      "tag": "0019_entrant_first_master_season",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1794271618103,
+      "tag": "0020_drop_entrant_master_flag",
+      "breakpoints": true
     }
   ]
 }

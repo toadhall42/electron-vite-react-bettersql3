@@ -13,7 +13,8 @@ export const events = sqliteTable("events", {
   dates: text().notNull(),
   number: integer().notNull(),
   seasonId: integer().notNull(),
-  pointModel: text().notNull(),
+  // Overrides the season's point model when set
+  pointModelId: integer(),
 });
 
 export const EventModel = createSelectSchema(events);
@@ -26,4 +27,5 @@ export type UpdateEvent = z.infer<typeof UpdateEventModel>;
 
 export type EventWithDetails = Event & {
   seasonName: string | null;
+  pointModelName: string | null;
 };

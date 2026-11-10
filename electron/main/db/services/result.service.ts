@@ -1,13 +1,16 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "../db-connect";
-import { results, drivers, events, sessions, entrants } from "../schema";
+import { results, drivers, events, sessions, entrants, seasons, pointModels } from "../schema";
 import {
   InsertResultModel,
   UpdateResultModel,
   type Result,
   type ResultWithDetails,
 } from "../schema/results";
-import type { Session } from "../schema/sessions";
+import type { Session, SessionType } from "../schema/sessions";
+import type { Event } from "../schema/events";
+import type { Season } from "../schema/seasons";
+import type { PointModel } from "../schema/pointModels";
 import { ValidationError, NotFoundError } from "../../utils/errors";
 
 const withDetails = () =>
@@ -59,17 +62,14 @@ function groupSessions(rows: Session[]): Session[][] {
 
 const classOf = (s: Session) => (s.carClass ?? "").trim().toUpperCase();
 
-// Points by finishing position (index 0 = 1st). Ported from Track-Notes Results.tsx
-const POINTS_CLASSIC = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-const POINTS_2026 = [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-const POINTS_MASTERS = POINTS_2026;
 const pointsFor = (table: number[], position: number) => (position > 0 ? table[position - 1] ?? 0 : 0);
 
 const TAG_DQ = "Disqualified: No Points";
 const TAG_GREEN = "Green Flag";
 const TAG_CHARGER = "Hard Charger";
 const TAG_POLE = "Pole Position";
-const POINT_TAGS = [TAG_DQ, TAG_GREEN, TAG_CHARGER, TAG_POLE];
+const TAG_BONUS_RACE = "Bonus Race";
+const POINT_TAGS = [TAG_DQ, TAG_GREEN, TAG_CHARGER, TAG_POLE, TAG_BONUS_RACE];
 
 // Re-derives the point tags each run while keeping any other comment text
 function withTags(comments: string | null, tags: string[]): string {
@@ -83,67 +83,81 @@ function withTags(comments: string | null, tags: string[]): string {
 type PointsUpdate = Pick<Result,
   "racePoints" | "bonusPoints" | "totalPoints" | "hardCharger" | "mastersPoints" | "bonusRacePoints" | "comments">;
 
-// Scores one race. Results must belong to a single race session.
-function scoreRace(race: Result[], pointModel: string, masterDriverIds: Set<number>): Map<number, Partial<PointsUpdate>> {
-  const scored = new Map<number, Partial<PointsUpdate>>();
-
-  if (pointModel.includes("Bonus Race")) {
-    const bonusRacePoints = pointModel === "2025 Bonus Race" ? 2 : 5;
-    // Bonus race points count toward the driver's total
-    for (const r of race) scored.set(r.id, { racePoints: 0, bonusPoints: 0, bonusRacePoints, totalPoints: bonusRacePoints });
-    return scored;
+// Every non-DQ driver in a Bonus Race session receives the model's bonus race points
+function scoreBonusRace(race: Result[], model: PointModel): Map<number, PointsUpdate> {
+  const scored = new Map<number, PointsUpdate>();
+  for (const r of race) {
+    const isDq = r.classification === "DQ";
+    const bonusRacePoints = isDq ? 0 : model.bonusRacePoints;
+    scored.set(r.id, {
+      racePoints: 0,
+      bonusPoints: 0,
+      mastersPoints: 0,
+      hardCharger: false,
+      bonusRacePoints,
+      // Bonus race points count toward the driver's total
+      totalPoints: bonusRacePoints,
+      comments: withTags(r.comments, isDq ? [TAG_DQ] : bonusRacePoints > 0 ? [TAG_BONUS_RACE] : []),
+    });
   }
+  return scored;
+}
 
-  // "15-12-10" is the 2026 table under its point-model name
-  const table = pointModel.includes("2026") || pointModel.includes("15-12-10") ? POINTS_2026 : POINTS_CLASSIC;
+// Scores one Race session. Results must belong to a single race session.
+function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<number>): Map<number, PointsUpdate> {
+  const scored = new Map<number, PointsUpdate>();
+
   // Unplaced (position 0) rows sort last
   const order = [...race].sort((a, b) => (a.positionOverall || Infinity) - (b.positionOverall || Infinity));
-  const maxGained = Math.max(...order.map((r) => r.positionsGained));
-  const hardChargerId = order.find((r) => r.positionsGained === maxGained)?.id;
+  const eligible = order.filter((r) => r.classification !== "DQ" && r.classification !== "DNS");
+  // Most positions gained; nobody earns it if no one gained a place. Ties go to the higher finisher.
+  const maxGained = Math.max(0, ...eligible.map((r) => r.positionsGained));
+  const hardChargerId = maxGained > 0 ? eligible.find((r) => r.positionsGained === maxGained)?.id : undefined;
 
-  const dqOffsetByClass = new Map<string, number>();
-  // DQ/DNS masters never advance this, so no DQ offset is needed (Track-Notes subtracted it twice)
+  // A DQ moves everyone behind them up one place (per class, or overall)
+  const dqOffset = new Map<string, number>();
+  // DQ/DNS masters never advance this, so no DQ offset is needed
   let mastersPosition = 1;
 
   for (const r of order) {
     const cls = (r.carClass ?? "").trim().toUpperCase();
+    const bucket = model.positionBasis === "overall" ? "" : cls;
+    const position = model.positionBasis === "overall" ? r.positionOverall : r.positionInClass;
     const isDq = r.classification === "DQ";
     const isDns = r.classification === "DNS";
     const tags: string[] = [];
     let racePoints = 0;
     let bonusPoints = 0;
     let mastersPoints = 0;
-    let hardCharger = false;
+    const hardCharger = r.id === hardChargerId;
 
     if (isDq) {
-      dqOffsetByClass.set(cls, (dqOffsetByClass.get(cls) ?? 0) + 1);
+      dqOffset.set(bucket, (dqOffset.get(bucket) ?? 0) + 1);
       tags.push(TAG_DQ);
-    } else if (cls && r.positionInClass > 0 && r.classification !== "DNF" && !isDns) {
-      racePoints = pointsFor(table, r.positionInClass - (dqOffsetByClass.get(cls) ?? 0));
+    } else if ((model.positionBasis === "overall" || cls) && position > 0 && r.classification !== "DNF" && !isDns) {
+      racePoints = pointsFor(model.positionPoints, position - (dqOffset.get(bucket) ?? 0));
     }
 
     if (masterDriverIds.has(r.driverId) && !isDq && !isDns) {
-      mastersPoints = pointsFor(POINTS_MASTERS, mastersPosition);
+      mastersPoints = pointsFor(model.mastersPoints, mastersPosition);
       mastersPosition++;
     }
 
     if (!isDq && !isDns) {
-      bonusPoints = 1;
-      tags.push(TAG_GREEN);
-      if (r.id === hardChargerId) {
-        bonusPoints++;
-        hardCharger = true;
-        tags.push(TAG_CHARGER);
-      }
-      if (r.startingPosition === 1) {
-        bonusPoints++;
-        tags.push(TAG_POLE);
-      }
+      const award = (points: number, tag: string) => {
+        if (points <= 0) return;
+        bonusPoints += points;
+        tags.push(tag);
+      };
+      award(model.greenFlagPoints, TAG_GREEN);
+      if (hardCharger) award(model.hardChargerPoints, TAG_CHARGER);
+      if (r.startingPosition === 1) award(model.polePositionPoints, TAG_POLE);
     }
 
     scored.set(r.id, {
       racePoints,
       bonusPoints,
+      bonusRacePoints: 0,
       totalPoints: racePoints + bonusPoints,
       hardCharger,
       mastersPoints,
@@ -153,7 +167,99 @@ function scoreRace(race: Result[], pointModel: string, masterDriverIds: Set<numb
   return scored;
 }
 
-export type CalculateResultsSummary = { races: number; inserted: number; updated: number };
+export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number };
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// The event's own point model, else its season's
+function pointModelFor(tx: Tx, event: Event, season: Season | undefined): PointModel {
+  const id = event.pointModelId ?? season?.pointModelId;
+  if (id == null) {
+    throw new NotFoundError(`No point model for event #${event.number} ${event.track}; assign one to ${season?.name ?? "its season"}`);
+  }
+  const model = tx.select().from(pointModels).where(eq(pointModels.id, id)).get();
+  if (!model) throw new NotFoundError(`Point model ${id} not found`);
+  return model;
+}
+
+const SCORED_TYPES: SessionType[] = ["Race", "Bonus Race"];
+
+// Builds one Result per driver per Race / Bonus Race session of the event, then scores it with the
+// event's point model. Starting position comes from the most recent Qualify session at or
+// before the race. Classification (DQ/DNF/DNS) is kept from the existing Result.
+function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
+  const season = tx.select().from(seasons).where(eq(seasons.id, event.seasonId)).get();
+  if (!season) throw new NotFoundError(`Event #${event.number} ${event.track} has no season`);
+  const model = pointModelFor(tx, event, season);
+  const rows = tx.select().from(sessions).where(eq(sessions.eventId, event.id)).all() as Session[];
+  const races = SCORED_TYPES.flatMap((type) =>
+    groupSessions(rows.filter((r) => r.sessionType === type)).map((group) => ({ type, group })));
+  const qualifies = groupSessions(rows.filter((r) => r.sessionType === "Qualify"));
+
+  const existing = tx.select().from(results).where(eq(results.eventId, event.id)).all();
+  const claimed = new Set<number>();
+  const summary: CalculateResultsSummary = { events: 1, races: races.length, inserted: 0, updated: 0 };
+  const raceDriverIds = [...new Set(races.flatMap((r) => r.group).map((r) => r.driverId))];
+  // Eligibility is by season year, so recalculating an old season uses who was a Master then
+  const masterDriverIds = new Set(
+    tx.select({ driverId: entrants.driverid }).from(entrants)
+      .where(and(inArray(entrants.driverid, raceDriverIds), lte(entrants.firstMasterSeason, season.year)))
+      .all()
+      .map((e) => e.driverId)
+  );
+
+  for (const { type, group: race } of races) {
+    const raceAt = sortKey(race[0]);
+    const qualify = qualifies.filter((q) => sortKey(q[0]) <= raceAt).at(-1);
+    const finishers = race.filter((r) => r.position > 0).sort((a, b) => a.position - b.position);
+    const raceResultIds: number[] = [];
+
+    for (const row of race) {
+      const startingPosition = qualify?.find((q) => q.driverId === row.driverId)?.position ?? 0;
+      const positionInClass = row.position > 0
+        ? finishers.filter((f) => classOf(f) === classOf(row)).findIndex((f) => f.id === row.id) + 1
+        : 0;
+      const values = {
+        driverId: row.driverId,
+        eventId: event.id,
+        sessionId: String(row.id),
+        carClass: row.carClass,
+        positionOverall: row.position,
+        positionInClass,
+        startingPosition,
+        positionsGained: startingPosition > 0 && row.position > 0 ? startingPosition - row.position : 0,
+      };
+
+      // Prefer a Result already linked to this session row, else an unlinked one for the driver
+      const match =
+        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === values.sessionId) ??
+        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
+
+      if (match) {
+        claimed.add(match.id);
+        tx.update(results).set(values).where(eq(results.id, match.id)).run();
+        raceResultIds.push(match.id);
+        summary.updated++;
+      } else {
+        const inserted = tx.insert(results).values(values).returning({ id: results.id }).get();
+        raceResultIds.push(inserted.id);
+        summary.inserted++;
+      }
+    }
+
+    const raceResults = tx.select().from(results).where(inArray(results.id, raceResultIds)).all() as Result[];
+    const scored = type === "Bonus Race" ? scoreBonusRace(raceResults, model) : scoreRace(raceResults, model, masterDriverIds);
+    for (const [id, points] of scored) {
+      tx.update(results).set(points).where(eq(results.id, id)).run();
+    }
+  }
+  return summary;
+}
+
+const hasScoredSessions = (tx: Tx, eventId: number) =>
+  tx.select({ id: sessions.id }).from(sessions)
+    .where(and(eq(sessions.eventId, eventId), inArray(sessions.sessionType, SCORED_TYPES)))
+    .limit(1).get() != null;
 
 export class ResultService {
   static getAll(): ResultWithDetails[] {
@@ -202,72 +308,29 @@ export class ResultService {
     });
   }
 
-  // Builds one Result per driver per Race session of the event, then scores it with the
-  // event's point model. Starting position comes from the most recent Qualify session at or
-  // before the race. Classification (DQ/DNF/DNS) is kept from the existing Result.
   static calculateForEvent(eventId: number): CalculateResultsSummary {
-    const event = db.select().from(events).where(eq(events.id, eventId)).get();
-    if (!event) throw new NotFoundError("Event not found");
-    const rows = db.select().from(sessions).where(eq(sessions.eventId, eventId)).all() as Session[];
-    const races = groupSessions(rows.filter((r) => r.sessionType === "Race"));
-    const qualifies = groupSessions(rows.filter((r) => r.sessionType === "Qualify"));
-    if (races.length === 0) throw new NotFoundError("No Race sessions found for this event");
-
     return db.transaction((tx) => {
-      const existing = tx.select().from(results).where(eq(results.eventId, eventId)).all();
-      const claimed = new Set<number>();
-      const summary: CalculateResultsSummary = { races: races.length, inserted: 0, updated: 0 };
-      const raceDriverIds = [...new Set(races.flat().map((r) => r.driverId))];
-      const masterDriverIds = new Set(
-        tx.select({ driverId: entrants.driverid }).from(entrants)
-          .where(and(inArray(entrants.driverid, raceDriverIds), eq(entrants.master, 1)))
-          .all()
-          .map((e) => e.driverId)
-      );
+      const event = tx.select().from(events).where(eq(events.id, eventId)).get();
+      if (!event) throw new NotFoundError("Event not found");
+      if (!hasScoredSessions(tx, eventId)) throw new NotFoundError("No Race or Bonus Race sessions found for this event");
+      return calculateEvent(tx, event);
+    });
+  }
 
-      for (const race of races) {
-        const raceAt = sortKey(race[0]);
-        const qualify = qualifies.filter((q) => sortKey(q[0]) <= raceAt).at(-1);
-        const finishers = race.filter((r) => r.position > 0).sort((a, b) => a.position - b.position);
-        const raceResultIds: number[] = [];
-
-        for (const row of race) {
-          const startingPosition = qualify?.find((q) => q.driverId === row.driverId)?.position ?? 0;
-          const positionInClass = row.position > 0
-            ? finishers.filter((f) => classOf(f) === classOf(row)).findIndex((f) => f.id === row.id) + 1
-            : 0;
-          const values = {
-            driverId: row.driverId,
-            eventId,
-            sessionId: String(row.id),
-            carClass: row.carClass,
-            positionOverall: row.position,
-            positionInClass,
-            startingPosition,
-            positionsGained: startingPosition > 0 && row.position > 0 ? startingPosition - row.position : 0,
-          };
-
-          // Prefer a Result already linked to this session row, else an unlinked one for the driver
-          const match =
-            existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === values.sessionId) ??
-            existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
-
-          if (match) {
-            claimed.add(match.id);
-            tx.update(results).set(values).where(eq(results.id, match.id)).run();
-            raceResultIds.push(match.id);
-            summary.updated++;
-          } else {
-            const inserted = tx.insert(results).values(values).returning({ id: results.id }).get();
-            raceResultIds.push(inserted.id);
-            summary.inserted++;
-          }
-        }
-
-        const raceResults = tx.select().from(results).where(inArray(results.id, raceResultIds)).all() as Result[];
-        for (const [id, points] of scoreRace(raceResults, event.pointModel, masterDriverIds)) {
-          tx.update(results).set(points).where(eq(results.id, id)).run();
-        }
+  // Recalculates every event in the season that has Race / Bonus Race sessions,
+  // e.g. after the season's point model changes
+  static calculateForSeason(seasonId: number): CalculateResultsSummary {
+    return db.transaction((tx) => {
+      const seasonEvents = tx.select().from(events).where(eq(events.seasonId, seasonId)).all()
+        .filter((e) => hasScoredSessions(tx, e.id));
+      if (seasonEvents.length === 0) throw new NotFoundError("No Race or Bonus Race sessions found for this season");
+      const summary: CalculateResultsSummary = { events: 0, races: 0, inserted: 0, updated: 0 };
+      for (const event of seasonEvents) {
+        const s = calculateEvent(tx, event);
+        summary.events += s.events;
+        summary.races += s.races;
+        summary.inserted += s.inserted;
+        summary.updated += s.updated;
       }
       return summary;
     });

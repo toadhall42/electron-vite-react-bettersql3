@@ -1,20 +1,32 @@
 import { count, eq } from "drizzle-orm";
 import { db } from "../db-connect";
-import { events, seasons } from "../schema";
+import { events, pointModels, seasons } from "../schema";
 import {
   InsertSeasonModel,
   UpdateSeasonModel,
-  type Season,
+  type SeasonWithDetails,
 } from "../schema/seasons";
 import { ValidationError, NotFoundError, ConflictError } from "../../utils/errors";
 
+const withDetails = () =>
+  db
+    .select({
+      id: seasons.id,
+      name: seasons.name,
+      year: seasons.year,
+      pointModelId: seasons.pointModelId,
+      pointModelName: pointModels.name,
+    })
+    .from(seasons)
+    .leftJoin(pointModels, eq(seasons.pointModelId, pointModels.id));
+
 export class SeasonService {
-  static getAll(): Season[] {
-    return db.select().from(seasons).all();
+  static getAll(): SeasonWithDetails[] {
+    return withDetails().all();
   }
 
-  static getOne(id: number): Season {
-    const result = db.select().from(seasons).where(eq(seasons.id, id)).get();
+  static getOne(id: number): SeasonWithDetails {
+    const result = withDetails().where(eq(seasons.id, id)).get();
     if (!result) throw new NotFoundError("Season not found");
     return result;
   }

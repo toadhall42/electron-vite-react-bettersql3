@@ -3,7 +3,14 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { getAllResults, addResult, updateResult, deleteResult, calculateResultsForEvent } from "@/lib/api/result";
+import {
+  getAllResults,
+  addResult,
+  updateResult,
+  deleteResult,
+  calculateResultsForEvent,
+  calculateResultsForSeason,
+} from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
@@ -15,7 +22,7 @@ import {
   type EventWithDetails,
   type Result,
   type ResultWithDetails,
-  type Season,
+  type SeasonWithDetails,
   type InsertResult,
   type UpdateResult,
 } from "../../global.d";
@@ -78,7 +85,9 @@ const raceKey = (r: ResultWithDetails) =>
   [r.eventId, r.sessionDate ?? "", r.sessionStartTime ?? "", r.sessionName ?? ""].join("|");
 const normClass = (c: string | null | undefined) => (c ?? "").trim().toUpperCase();
 
-type MasterFilter = "" | "yes";
+// "noPodium" = Masters standings without drivers who are top 3 in their class
+type MasterFilter = "" | "yes" | "noPodium";
+const PODIUM = 3;
 
 const HEADER_SELECT =
   "bg-white border border-gray-300 rounded-md px-1 py-0.5 text-[10px] uppercase tracking-widest text-gray-500 font-mono outline-none focus:border-gray-500 w-full";
@@ -118,14 +127,14 @@ export function ResultTablePage() {
   const [data, setData] = useState<ResultWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
-  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasons, setSeasons] = useState<SeasonWithDetails[]>([]);
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
   const [raceFilter, setRaceFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [masterFilter, setMasterFilter] = useState<MasterFilter>("");
-  // Drivers with any Entrant flagged master — same rule the points calculation uses
-  const [masterDriverIds, setMasterDriverIds] = useState<Set<number>>(new Set());
+  // Earliest First Master Season across each driver's entrants
+  const [firstMasterSeason, setFirstMasterSeason] = useState<Map<number, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -142,11 +151,16 @@ export function ResultTablePage() {
       getAllEntrants(),
     ]);
     const entrants = (entRes?.data as EntrantWithDetails[]) ?? [];
-    setMasterDriverIds(new Set(entrants.filter((e) => e.master).map((e) => e.driverid)));
+    const firstSeason = new Map<number, number>();
+    for (const e of entrants) {
+      if (e.firstMasterSeason == null) continue;
+      firstSeason.set(e.driverid, Math.min(e.firstMasterSeason, firstSeason.get(e.driverid) ?? Infinity));
+    }
+    setFirstMasterSeason(firstSeason);
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
-    setSeasons(((seaRes?.data as Season[]) ?? []).sort((a, b) => b.year - a.year));
+    setSeasons(((seaRes?.data as SeasonWithDetails[]) ?? []).sort((a, b) => b.year - a.year));
     setLoading(false);
   }
 
@@ -189,12 +203,14 @@ export function ResultTablePage() {
     await load();
   }
 
+  // Scores the selected event, or every event in the selected season
   async function calculate() {
-    if (eventFilter === "") return;
+    if (seasonFilter === "") return;
     setCalcStatus("Calculating...");
-    const res = await calculateResultsForEvent(eventFilter);
+    const res = eventFilter !== "" ? await calculateResultsForEvent(eventFilter) : await calculateResultsForSeason(seasonFilter);
+    const scope = res?.data && res.data.events > 1 ? ` across ${res.data.events} events` : "";
     setCalcStatus(res?.code === 200 && res.data
-      ? `Calculated ${res.data.races} race session(s): ${res.data.inserted} added, ${res.data.updated} updated`
+      ? `Calculated ${res.data.races} race session(s)${scope}: ${res.data.inserted} added, ${res.data.updated} updated`
       : `Calculate failed: ${res?.message ?? "no response"}`);
     await load();
   }
@@ -215,9 +231,13 @@ export function ResultTablePage() {
     [data]
   );
 
-  const matchesColumnFilters = (driverId: number, carClass: string | null | undefined) =>
-    (classFilter === "" || normClass(carClass) === classFilter) &&
-    (masterFilter === "" || masterDriverIds.has(driverId));
+  // Masters for the selected season's year — same rule the points calculation uses:
+  // eligible from First Master Season onward
+  const masterDriverIds = useMemo(() => {
+    const year = seasons.find((s) => s.id === seasonFilter)?.year;
+    if (year == null) return new Set<number>();
+    return new Set([...firstMasterSeason].filter(([, first]) => first <= year).map(([id]) => id));
+  }, [firstMasterSeason, seasons, seasonFilter]);
 
   const classHeader = () => (
     <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={HEADER_SELECT}>
@@ -230,6 +250,7 @@ export function ResultTablePage() {
     <select value={masterFilter} onChange={(e) => setMasterFilter(e.target.value as MasterFilter)} className={HEADER_SELECT}>
       <option value="">All</option>
       <option value="yes">MASTERS ONLY</option>
+      <option value="noPodium">MASTERS, NOT CLASS TOP {PODIUM}</option>
     </select>
   );
 
@@ -414,6 +435,16 @@ export function ResultTablePage() {
     [events, seasonFilter]
   );
 
+  // Which point model the Calculate button will apply
+  const seasonModelLabel = useMemo(() => {
+    const seasonModel = seasons.find((s) => s.id === seasonFilter)?.pointModelName;
+    const event = events.find((e) => e.id === eventFilter);
+    if (event?.pointModelName) return `the ${event.pointModelName} point model (event override)`;
+    const overrides = eventFilter === "" ? seasonEvents.filter((e) => e.pointModelName).length : 0;
+    const base = seasonModel ? `the ${seasonModel} point model` : "no point model — assign one on the Seasons page";
+    return overrides ? `${base}; ${overrides} event(s) override it` : base;
+  }, [seasons, events, seasonEvents, seasonFilter, eventFilter]);
+
   const scopedData = useMemo(() => {
     const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
     return data.filter((r) =>
@@ -422,11 +453,12 @@ export function ResultTablePage() {
     );
   }, [data, seasonEvents, seasonFilter, eventFilter]);
 
-  // Points only come from Race sessions, so only those are offered
+  // Points only come from Race and Bonus Race sessions, so only those are offered
   const races = useMemo(() => {
     const byKey = new Map<string, ResultWithDetails>();
     for (const r of scopedData) {
-      if (r.sessionType === "Race" && !byKey.has(raceKey(r))) byKey.set(raceKey(r), r);
+      const scored = r.sessionType === "Race" || r.sessionType === "Bonus Race";
+      if (scored && !byKey.has(raceKey(r))) byKey.set(raceKey(r), r);
     }
     return [...byKey.entries()]
       .sort(([, a], [, b]) =>
@@ -437,12 +469,6 @@ export function ResultTablePage() {
       }));
   }, [scopedData, eventFilter]);
 
-  const filteredData = useMemo(
-    () => scopedData.filter((r) =>
-      (raceFilter === "" || raceKey(r) === raceFilter) && matchesColumnFilters(r.driverId, r.carClass)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scopedData, raceFilter, classFilter, masterFilter, masterDriverIds]
-  );
 
   // One row per driver + class, ranked by total points within each class
   const totals = useMemo(() => {
@@ -475,12 +501,39 @@ export function ResultTablePage() {
     return rows;
   }, [scopedData]);
 
-  // Applied after ranking, so a driver keeps their place in class
-  const visibleTotals = useMemo(
-    () => totals.filter((t) => matchesColumnFilters(t.driverId, t.carClass)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [totals, classFilter, masterFilter, masterDriverIds]
+  // Drivers in the top 3 of any class for the selected season (or event)
+  const classPodiumDriverIds = useMemo(
+    () => new Set(totals.filter((t) => t.carClass && t.rank <= PODIUM).map((t) => t.driverId)),
+    [totals]
   );
+
+  const matchesColumnFilters = (driverId: number, carClass: string | null | undefined) =>
+    (classFilter === "" || normClass(carClass) === classFilter) &&
+    (masterFilter === "" || masterDriverIds.has(driverId)) &&
+    (masterFilter !== "noPodium" || !classPodiumDriverIds.has(driverId));
+
+  const filteredData = useMemo(
+    () => scopedData.filter((r) =>
+      (raceFilter === "" || raceKey(r) === raceFilter) && matchesColumnFilters(r.driverId, r.carClass)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scopedData, raceFilter, classFilter, masterFilter, masterDriverIds, classPodiumDriverIds]
+  );
+
+  // Applied after ranking, so a driver keeps their place in class.
+  // The Masters views are ranked by Masters points instead.
+  const visibleTotals = useMemo(() => {
+    const rows = totals.filter((t) => matchesColumnFilters(t.driverId, t.carClass));
+    if (masterFilter === "") return rows;
+    const ranked = rows
+      .map((t) => ({ ...t }))
+      .sort((a, b) => b.mastersPoints - a.mastersPoints || a.driverName.localeCompare(b.driverName));
+    ranked.forEach((t, i) => {
+      const prev = ranked[i - 1];
+      t.rank = prev && prev.mastersPoints === t.mastersPoints ? prev.rank : i + 1;
+    });
+    return ranked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totals, classFilter, masterFilter, masterDriverIds, classPodiumDriverIds]);
 
   // Drop a race selection that no longer exists under the season/event filters
   useEffect(() => {
@@ -531,14 +584,18 @@ export function ResultTablePage() {
               {races.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </Sel>
           </div>
-          <Btn onClick={() => eventFilter !== "" && calculate()}>Calculate from Sessions</Btn>
+          <Btn onClick={calculate}>{eventFilter === "" ? "Calculate Season" : "Calculate Event"}</Btn>
           <Btn onClick={load}>Refresh</Btn>
         </div>
       </div>
 
       {calcStatus && <p className="text-xs text-gray-500 flex-shrink-0">{calcStatus}</p>}
-      {!calcStatus && eventFilter === "" && (
-        <p className="text-xs text-gray-400 flex-shrink-0">Select an event to calculate its Results from Sessions</p>
+      {!calcStatus && (
+        <p className="text-xs text-gray-400 flex-shrink-0">
+          {seasonFilter === ""
+            ? "Select a season or event to calculate its Results from Sessions"
+            : `Points use ${seasonModelLabel}`}
+        </p>
       )}
 
       {!loading && seasonFilter === "" && (
@@ -554,7 +611,7 @@ export function ResultTablePage() {
             <div className={`${TOTALS_GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total", "Masters"].map((h) => (
                 <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">
-                  {h === "Class" ? classHeader() : h === "Masters" ? masterHeader() : h}
+                  {h === "Class" ? classHeader() : h === "Masters" ? masterHeader() : h === "Pos" && masterFilter !== "" ? "M Pos" : h}
                 </span>
               ))}
             </div>

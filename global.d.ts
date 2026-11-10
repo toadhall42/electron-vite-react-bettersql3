@@ -35,7 +35,16 @@ export type {
   Season,
   InsertSeason,
   UpdateSeason,
+  SeasonWithDetails,
 } from "./electron/main/db/schema/seasons";
+
+export type {
+  PointModel,
+  InsertPointModel,
+  UpdatePointModel,
+  PointModelWithUsage,
+  PositionBasis,
+} from "./electron/main/db/schema/pointModels";
 
 export type {
   Event,

@@ -6,3 +6,4 @@ export { events } from "./events";
 export { results } from "./results";
 export { sessions } from "./sessions";
 export { weather } from "./weather";
+export { pointModels } from "./pointModels";

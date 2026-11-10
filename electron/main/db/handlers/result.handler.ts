@@ -60,3 +60,12 @@ ipcMain.handle("db/result/calculateForEvent", (_event, { eventId }): QueryRespon
     return toErrorResponse(err);
   }
 });
+
+ipcMain.handle("db/result/calculateForSeason", (_event, { seasonId }): QueryResponse => {
+  try {
+    return response.ok({ data: ResultService.calculateForSeason(seasonId) });
+  } catch (err: unknown) {
+    log.error("[RESULT HANDLER] result/calculateForSeason failed", { seasonId, err });
+    return toErrorResponse(err);
+  }
+});
