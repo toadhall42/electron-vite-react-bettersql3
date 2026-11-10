@@ -19,7 +19,6 @@ export const results = sqliteTable("results", {
   hardCharger: integer({ mode: "boolean" }).notNull().default(false),
   racePoints: integer().notNull().default(0),
   bonusPoints: integer().notNull().default(0),
-  mastersPoints: integer().notNull().default(0),
   totalPoints: integer().notNull().default(0),
   bonusRacePoints: integer().notNull().default(0),
   tireBrand: text(),

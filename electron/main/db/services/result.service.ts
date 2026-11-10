@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db-connect";
 import { results, drivers, events, sessions, seasons, pointModels } from "../schema";
 import {
@@ -28,7 +28,6 @@ const withDetails = () =>
       hardCharger: results.hardCharger,
       racePoints: results.racePoints,
       bonusPoints: results.bonusPoints,
-      mastersPoints: results.mastersPoints,
       totalPoints: results.totalPoints,
       bonusRacePoints: results.bonusRacePoints,
       tireBrand: results.tireBrand,
@@ -81,7 +80,7 @@ function withTags(comments: string | null, tags: string[]): string {
 }
 
 type PointsUpdate = Pick<Result,
-  "racePoints" | "bonusPoints" | "totalPoints" | "hardCharger" | "mastersPoints" | "bonusRacePoints" | "comments">;
+  "racePoints" | "bonusPoints" | "totalPoints" | "hardCharger" | "bonusRacePoints" | "comments">;
 
 // Every non-DQ driver in a Bonus Race session receives the model's bonus race points
 function scoreBonusRace(race: Result[], model: PointModel): Map<number, PointsUpdate> {
@@ -92,7 +91,6 @@ function scoreBonusRace(race: Result[], model: PointModel): Map<number, PointsUp
     scored.set(r.id, {
       racePoints: 0,
       bonusPoints: 0,
-      mastersPoints: 0,
       hardCharger: false,
       bonusRacePoints,
       // Bonus race points count toward the driver's total
@@ -104,7 +102,7 @@ function scoreBonusRace(race: Result[], model: PointModel): Map<number, PointsUp
 }
 
 // Scores one Race session. Results must belong to a single race session.
-function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<number>): Map<number, PointsUpdate> {
+function scoreRace(race: Result[], model: PointModel): Map<number, PointsUpdate> {
   const scored = new Map<number, PointsUpdate>();
 
   // Unplaced (position 0) rows sort last
@@ -116,8 +114,6 @@ function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<numbe
 
   // A DQ moves everyone behind them up one place (per class, or overall)
   const dqOffset = new Map<string, number>();
-  // DQ/DNS masters never advance this, so no DQ offset is needed
-  let mastersPosition = 1;
 
   for (const r of order) {
     const cls = (r.carClass ?? "").trim().toUpperCase();
@@ -128,7 +124,6 @@ function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<numbe
     const tags: string[] = [];
     let racePoints = 0;
     let bonusPoints = 0;
-    let mastersPoints = 0;
     const hardCharger = r.id === hardChargerId;
 
     if (isDq) {
@@ -136,11 +131,6 @@ function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<numbe
       tags.push(TAG_DQ);
     } else if ((model.positionBasis === "overall" || cls) && position > 0 && r.classification !== "DNF" && !isDns) {
       racePoints = pointsFor(model.positionPoints, position - (dqOffset.get(bucket) ?? 0));
-    }
-
-    if (masterDriverIds.has(r.driverId) && !isDq && !isDns) {
-      mastersPoints = pointsFor(model.mastersPoints, mastersPosition);
-      mastersPosition++;
     }
 
     if (!isDq && !isDns) {
@@ -160,7 +150,6 @@ function scoreRace(race: Result[], model: PointModel, masterDriverIds: Set<numbe
       bonusRacePoints: 0,
       totalPoints: racePoints + bonusPoints,
       hardCharger,
-      mastersPoints,
       comments: withTags(r.comments, tags),
     });
   }
@@ -199,14 +188,6 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const existing = tx.select().from(results).where(eq(results.eventId, event.id)).all();
   const claimed = new Set<number>();
   const summary: CalculateResultsSummary = { events: 1, races: races.length, inserted: 0, updated: 0 };
-  const raceDriverIds = [...new Set(races.flatMap((r) => r.group).map((r) => r.driverId))];
-  // Eligibility is by season year, so recalculating an old season uses who was a Master then
-  const masterDriverIds = new Set(
-    tx.select({ id: drivers.id }).from(drivers)
-      .where(and(inArray(drivers.id, raceDriverIds), lte(drivers.firstMasterSeason, season.year)))
-      .all()
-      .map((d) => d.id)
-  );
 
   for (const { type, group: race } of races) {
     const raceAt = sortKey(race[0]);
@@ -248,7 +229,7 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
     }
 
     const raceResults = tx.select().from(results).where(inArray(results.id, raceResultIds)).all() as Result[];
-    const scored = type === "Bonus Race" ? scoreBonusRace(raceResults, model) : scoreRace(raceResults, model, masterDriverIds);
+    const scored = type === "Bonus Race" ? scoreBonusRace(raceResults, model) : scoreRace(raceResults, model);
     for (const [id, points] of scored) {
       tx.update(results).set(points).where(eq(results.id, id)).run();
     }

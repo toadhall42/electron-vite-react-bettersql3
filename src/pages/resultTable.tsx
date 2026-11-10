@@ -43,7 +43,6 @@ const EMPTY_NEW = {
   hardCharger: false,
   racePoints: 0,
   bonusPoints: 0,
-  mastersPoints: 0,
   totalPoints: 0,
   bonusRacePoints: 0,
   tireBrand: "",
@@ -51,10 +50,10 @@ const EMPTY_NEW = {
   comments: "",
 };
 
-// col widths: id  driver  event (sized to fit)  sess  class  pos  clPos  start  +/-  hc  race  bon  mast  tot  bonR  tire  class'n  comments  actions
+// col widths: id  driver  event (sized to fit)  sess  class  pos  clPos  start  +/-  hc  race  bon  tot  bonR  tire  class'n  comments  actions
 const GRID = "grid items-center px-2";
-// Season totals: pos  driver  class  races  race  bonus  bonusRace  total  masters
-const TOTALS_GRID = "grid grid-cols-[50px_1fr_90px_70px_80px_80px_100px_80px_80px] items-center px-4";
+// Season totals: pos  driver  class  races  race  bonus  bonusRace  total
+const TOTALS_GRID = "grid grid-cols-[50px_1fr_90px_70px_80px_80px_100px_80px] items-center px-4";
 
 type DriverTotals = {
   key: string;
@@ -67,11 +66,10 @@ type DriverTotals = {
   bonusPoints: number;
   bonusRacePoints: number;
   totalPoints: number;
-  mastersPoints: number;
 };
 
 const gridCols = (eventWidth: number) =>
-  `44px 140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 60px 55px 60px 70px 80px 1fr 155px`;
+  `44px 140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 55px 60px 70px 80px 1fr 155px`;
 
 // Monospace glyphs are 0.6em wide: text-xs (12px) for display, text-sm (14px) inside selects
 const MONO_XS = 7.2;
@@ -83,7 +81,7 @@ const raceKey = (r: ResultWithDetails) =>
   [r.eventId, r.sessionDate ?? "", r.sessionStartTime ?? "", r.sessionName ?? ""].join("|");
 const normClass = (c: string | null | undefined) => (c ?? "").trim().toUpperCase();
 
-// "noPodium" = Masters standings without drivers who are top 3 in their class
+// Masters is only a filter on the standings. "noPodium" also hides drivers in their class's top 3.
 type MasterFilter = "" | "yes" | "noPodium";
 const PODIUM = 3;
 
@@ -168,7 +166,6 @@ export function ResultTablePage() {
       hardCharger: row.hardCharger,
       racePoints: row.racePoints,
       bonusPoints: row.bonusPoints,
-      mastersPoints: row.mastersPoints,
       totalPoints: row.totalPoints,
       bonusRacePoints: row.bonusRacePoints,
       tireBrand: row.tireBrand,
@@ -219,8 +216,7 @@ export function ResultTablePage() {
     [data]
   );
 
-  // Masters for the selected season's year — same rule the points calculation uses:
-  // eligible from First Master Season onward
+  // Masters for the selected season's year: eligible from First Master Season onward
   const masterDriverIds = useMemo(() => {
     const year = seasons.find((s) => s.id === seasonFilter)?.year;
     if (year == null) return new Set<number>();
@@ -231,14 +227,6 @@ export function ResultTablePage() {
     <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={HEADER_SELECT}>
       <option value="">Class</option>
       {classOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-    </select>
-  );
-
-  const masterHeader = () => (
-    <select value={masterFilter} onChange={(e) => setMasterFilter(e.target.value as MasterFilter)} className={HEADER_SELECT}>
-      <option value="">All</option>
-      <option value="yes">MASTERS ONLY</option>
-      <option value="noPodium">MASTERS, NOT CLASS TOP {PODIUM}</option>
     </select>
   );
 
@@ -351,13 +339,6 @@ export function ResultTablePage() {
               ? numInp(`bonusPoints-${editingId}`, editRef.current.bonusPoints, "bonusPoints", editRef)
               : <span className="text-gray-500 text-xs">{info.getValue()}</span>,
         }),
-        col.accessor("mastersPoints", {
-          header: masterHeader,
-          cell: (info) =>
-            editingId === info.row.original.id
-              ? numInp(`mastersPoints-${editingId}`, editRef.current.mastersPoints, "mastersPoints", editRef)
-              : <span className="text-gray-500 text-xs">{info.getValue()}</span>,
-        }),
         col.accessor("totalPoints", {
           header: "Total",
           cell: (info) =>
@@ -413,7 +394,7 @@ export function ResultTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, events, classFilter, classOptions, masterFilter]
+    [editingId, drivers, events, classFilter, classOptions]
   );
 
   const seasonEvents = useMemo(
@@ -466,14 +447,13 @@ export function ResultTablePage() {
       const key = `${r.driverId}|${carClass}`;
       const t = byDriver.get(key) ?? {
         key, driverId: r.driverId, rank: 0, driverName: r.driverName ?? "—", carClass, races: 0, raceKeys: new Set<string>(),
-        racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0, mastersPoints: 0,
+        racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0,
       };
       t.raceKeys.add(r.sessionId ? raceKey(r) : `row-${r.id}`);
       t.racePoints += r.racePoints;
       t.bonusPoints += r.bonusPoints;
       t.bonusRacePoints += r.bonusRacePoints;
       t.totalPoints += r.totalPoints;
-      t.mastersPoints += r.mastersPoints;
       byDriver.set(key, t);
     }
     const rows = [...byDriver.values()]
@@ -508,16 +488,16 @@ export function ResultTablePage() {
   );
 
   // Applied after ranking, so a driver keeps their place in class.
-  // The Masters views are ranked by Masters points instead.
+  // The Masters views rank the remaining drivers by total points across classes.
   const visibleTotals = useMemo(() => {
     const rows = totals.filter((t) => matchesColumnFilters(t.driverId, t.carClass));
     if (masterFilter === "") return rows;
     const ranked = rows
       .map((t) => ({ ...t }))
-      .sort((a, b) => b.mastersPoints - a.mastersPoints || a.driverName.localeCompare(b.driverName));
+      .sort((a, b) => b.totalPoints - a.totalPoints || a.driverName.localeCompare(b.driverName));
     ranked.forEach((t, i) => {
       const prev = ranked[i - 1];
-      t.rank = prev && prev.mastersPoints === t.mastersPoints ? prev.rank : i + 1;
+      t.rank = prev && prev.totalPoints === t.totalPoints ? prev.rank : i + 1;
     });
     return ranked;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -536,7 +516,7 @@ export function ResultTablePage() {
   }, [events]);
   const gridStyle = { gridTemplateColumns: gridCols(eventWidth) };
   // Fixed columns + event column + room for comments (was a flat 1760px with a 140px event column)
-  const tableMinWidth = 1620 + eventWidth;
+  const tableMinWidth = 1560 + eventWidth;
 
   const table = useTable({ features, columns, data: filteredData });
 
@@ -572,6 +552,14 @@ export function ResultTablePage() {
               {races.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </Sel>
           </div>
+          <div className="w-56">
+            <Sel value={masterFilter} disabled={seasonFilter === ""}
+              onChange={(e) => setMasterFilter(e.target.value as MasterFilter)}>
+              <option value="">All drivers</option>
+              <option value="yes">Masters only</option>
+              <option value="noPodium">Masters, not class top {PODIUM}</option>
+            </Sel>
+          </div>
           <Btn onClick={calculate}>{eventFilter === "" ? "Calculate Season" : "Calculate Event"}</Btn>
           <Btn onClick={load}>Refresh</Btn>
         </div>
@@ -597,9 +585,9 @@ export function ResultTablePage() {
         <div className="flex-1 overflow-auto min-h-0">
           <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[800px]">
             <div className={`${TOTALS_GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
-              {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total", "Masters"].map((h) => (
+              {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total"].map((h) => (
                 <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">
-                  {h === "Class" ? classHeader() : h === "Masters" ? masterHeader() : h === "Pos" && masterFilter !== "" ? "M Pos" : h}
+                  {h === "Class" ? classHeader() : h === "Pos" && masterFilter !== "" ? "M Pos" : h}
                 </span>
               ))}
             </div>
@@ -617,7 +605,6 @@ export function ResultTablePage() {
                 <span className="text-gray-500">{t.bonusPoints}</span>
                 <span className="text-gray-500">{t.bonusRacePoints}</span>
                 <span className="text-gray-900 font-semibold">{t.totalPoints}</span>
-                <span className="text-gray-500">{t.mastersPoints}</span>
               </div>
             ))}
           </div>
@@ -692,8 +679,6 @@ export function ResultTablePage() {
                 onChange={(e) => setNewRow((v) => ({ ...v, racePoints: Number(e.target.value) }))} />
               <Inp value={String(newRow.bonusPoints)} placeholder="bon"
                 onChange={(e) => setNewRow((v) => ({ ...v, bonusPoints: Number(e.target.value) }))} />
-              <Inp value={String(newRow.mastersPoints)} placeholder="mast"
-                onChange={(e) => setNewRow((v) => ({ ...v, mastersPoints: Number(e.target.value) }))} />
               <Inp value={String(newRow.totalPoints)} placeholder="tot"
                 onChange={(e) => setNewRow((v) => ({ ...v, totalPoints: Number(e.target.value) }))} />
               <Inp value={String(newRow.bonusRacePoints)} placeholder="br"

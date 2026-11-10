@@ -13,7 +13,7 @@ export const drivers = sqliteTable("drivers", {
   lastname: text().notNull(),
   suffix: text(),
   active: integer( { mode: 'boolean' }).notNull().default(true),
-  // Season year from which the driver scores Masters points (65 before that season's first race).
+  // Season year from which the driver counts as a Master (65 before that season's first race).
   // Eligibility carries into every later season.
   firstMasterSeason: integer(),
 });

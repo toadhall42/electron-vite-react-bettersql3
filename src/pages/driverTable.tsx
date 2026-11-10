@@ -163,7 +163,7 @@ export function DriverTablePage() {
               </span>
             ),
         }),
-        // Season year the driver first scores Masters points; blank = not a Master
+        // Season year the driver first counts as a Master; blank = not a Master
         col.accessor("firstMasterSeason", {
           header: "Master Since",
           cell: (info) =>

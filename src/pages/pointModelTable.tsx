@@ -22,10 +22,9 @@ import { Sel } from "@/components/common/select";
 const LABEL = "text-[10px] uppercase tracking-widest text-gray-400";
 
 // Points tables are edited as comma/space separated text, e.g. "15, 12, 10"
-type Draft = Omit<InsertPointModel, "positionPoints" | "mastersPoints" | "description"> & {
+type Draft = Omit<InsertPointModel, "positionPoints" | "description"> & {
   description: string;
   positionPoints: string;
-  mastersPoints: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -33,7 +32,6 @@ const EMPTY_DRAFT: Draft = {
   description: "",
   positionBasis: "class",
   positionPoints: "",
-  mastersPoints: "",
   bonusRacePoints: 0,
   greenFlagPoints: 0,
   polePositionPoints: 0,
@@ -52,7 +50,6 @@ const toDraft = (m: PointModelWithUsage): Draft => ({
   description: m.description ?? "",
   positionBasis: m.positionBasis,
   positionPoints: m.positionPoints.join(", "),
-  mastersPoints: m.mastersPoints.join(", "),
   bonusRacePoints: m.bonusRacePoints,
   greenFlagPoints: m.greenFlagPoints,
   polePositionPoints: m.polePositionPoints,
@@ -70,9 +67,7 @@ function fromDraft(d: Draft): InsertPointModel | string {
   if (!d.name.trim()) return "Name is required";
   const positionPoints = parseTable(d.positionPoints);
   if (typeof positionPoints === "string") return `Position points: ${positionPoints}`;
-  const mastersPoints = parseTable(d.mastersPoints);
-  if (typeof mastersPoints === "string") return `Masters points: ${mastersPoints}`;
-  return { ...d, name: d.name.trim(), description: d.description.trim() || null, positionPoints, mastersPoints };
+  return { ...d, name: d.name.trim(), description: d.description.trim() || null, positionPoints };
 }
 
 function PointsTable({ points }: { points: number[] }) {
@@ -107,9 +102,6 @@ function ModelForm({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => 
       <span className={LABEL}>Position points</span>
       <Inp value={draft.positionPoints} placeholder="points for P1, P2, P3… e.g. 15, 12, 10, 9"
         onChange={(e) => set("positionPoints", e.target.value)} />
-      <span className={LABEL}>Masters points</span>
-      <Inp value={draft.mastersPoints} placeholder="points by finishing order among masters drivers"
-        onChange={(e) => set("mastersPoints", e.target.value)} />
       {BONUSES.map(({ field, label, hint }) => (
         <div key={field} className="contents">
           <span className={LABEL}>{label}</span>
@@ -225,8 +217,6 @@ export function PointModelTablePage() {
         <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2 items-center">
           <span className={LABEL}>Position ({m.positionBasis === "class" ? "in class" : "overall"})</span>
           <PointsTable points={m.positionPoints} />
-          <span className={LABEL}>Masters</span>
-          <PointsTable points={m.mastersPoints} />
           <span className={LABEL}>Bonuses</span>
           <div className="flex flex-wrap gap-4 text-xs text-gray-500">
             {BONUSES.map(({ field, label }) => (

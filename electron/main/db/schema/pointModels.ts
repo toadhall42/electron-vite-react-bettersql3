@@ -11,14 +11,13 @@ export const POSITION_BASES = ["class", "overall"] as const;
 export type PositionBasis = (typeof POSITION_BASES)[number];
 
 // A scoring scheme, normally assigned to a whole season (events may override it).
-// positionPoints / mastersPoints are JSON arrays of points by position (index 0 = 1st).
+// positionPoints is a JSON array of points by position (index 0 = 1st).
 export const pointModels = sqliteTable("point_models", {
   id: integer().primaryKey(),
   name: text().notNull(),
   description: text(),
   positionBasis: text({ enum: POSITION_BASES }).notNull().default("class"),
   positionPoints: text({ mode: "json" }).$type<number[]>().notNull().default([]),
-  mastersPoints: text({ mode: "json" }).$type<number[]>().notNull().default([]),
   // Every driver in a Bonus Race session receives this
   bonusRacePoints: integer().notNull().default(0),
   // Circumstance bonuses for Race sessions
@@ -32,17 +31,14 @@ const name = z.string().trim().min(1, "Name is required");
 
 export const PointModelModel = createSelectSchema(pointModels, {
   positionPoints: pointsTable,
-  mastersPoints: pointsTable,
 });
 export const InsertPointModelModel = createInsertSchema(pointModels, {
   name,
   positionPoints: pointsTable,
-  mastersPoints: pointsTable,
 }).omit({ id: true });
 export const UpdatePointModelModel = createUpdateSchema(pointModels, {
   name,
   positionPoints: pointsTable,
-  mastersPoints: pointsTable,
 });
 
 export type PointModel = z.infer<typeof PointModelModel>;
