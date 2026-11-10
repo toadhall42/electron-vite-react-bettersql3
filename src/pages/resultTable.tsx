@@ -12,13 +12,11 @@ import {
   calculateResultsForSeason,
 } from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
-import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
-  type EntrantWithDetails,
   type EventWithDetails,
   type Result,
   type ResultWithDetails,
@@ -133,8 +131,6 @@ export function ResultTablePage() {
   const [raceFilter, setRaceFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [masterFilter, setMasterFilter] = useState<MasterFilter>("");
-  // Earliest First Master Season across each driver's entrants
-  const [firstMasterSeason, setFirstMasterSeason] = useState<Map<number, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -143,20 +139,12 @@ export function ResultTablePage() {
 
   async function load() {
     setLoading(true);
-    const [resRes, drvRes, evtRes, seaRes, entRes] = await Promise.all([
+    const [resRes, drvRes, evtRes, seaRes] = await Promise.all([
       getAllResults(),
       getAllDrivers(),
       getAllEvents(),
       getAllSeasons(),
-      getAllEntrants(),
     ]);
-    const entrants = (entRes?.data as EntrantWithDetails[]) ?? [];
-    const firstSeason = new Map<number, number>();
-    for (const e of entrants) {
-      if (e.firstMasterSeason == null) continue;
-      firstSeason.set(e.driverid, Math.min(e.firstMasterSeason, firstSeason.get(e.driverid) ?? Infinity));
-    }
-    setFirstMasterSeason(firstSeason);
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
@@ -236,8 +224,8 @@ export function ResultTablePage() {
   const masterDriverIds = useMemo(() => {
     const year = seasons.find((s) => s.id === seasonFilter)?.year;
     if (year == null) return new Set<number>();
-    return new Set([...firstMasterSeason].filter(([, first]) => first <= year).map(([id]) => id));
-  }, [firstMasterSeason, seasons, seasonFilter]);
+    return new Set(drivers.filter((d) => d.firstMasterSeason != null && d.firstMasterSeason <= year).map((d) => d.id));
+  }, [drivers, seasons, seasonFilter]);
 
   const classHeader = () => (
     <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={HEADER_SELECT}>

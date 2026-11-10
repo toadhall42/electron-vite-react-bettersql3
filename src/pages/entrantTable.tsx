@@ -27,14 +27,8 @@ import { Sel } from "@/components/common/select";
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, EntrantWithDetails>();
 const EMPTY: EntrantWithDetails[] = [];
-const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "", firstMasterSeason: null as number | null };
-const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_90px_170px] items-center px-4";
-
-// Blank clears the year rather than storing 0
-const optYear = (v: string) => {
-  const digits = v.replace(/\D/g, "");
-  return digits === "" ? null : Number(digits);
-};
+const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "" };
+const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
 
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
@@ -83,7 +77,6 @@ export function EntrantTablePage() {
       defaulttire: row.defaulttire,
       active: row.active,
       notes: row.notes,
-      firstMasterSeason: row.firstMasterSeason,
     };
     setEditVehicleId(row.vehicleid || null);
     setEditingId(row.id);
@@ -229,18 +222,6 @@ export function EntrantTablePage() {
               <span className="text-gray-500 text-xs truncate">{info.getValue() ?? ""}</span>
             ),
         }),
-        // Season year the driver first scores Masters points; blank = not a Master
-        col.accessor("firstMasterSeason", {
-          header: "Master Since",
-          cell: (info) =>
-            editingId === info.row.original.id ? (
-              <Inp key={`firstMasterSeason-${editingId}`} placeholder="year" inputMode="numeric"
-                defaultValue={editRef.current.firstMasterSeason == null ? "" : String(editRef.current.firstMasterSeason)}
-                onChange={(e) => { editRef.current = { ...editRef.current, firstMasterSeason: optYear(e.target.value) }; }} />
-            ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
-            ),
-        }),
         col.display({
           id: "actions",
           cell: (info) => {
@@ -376,12 +357,6 @@ export function EntrantTablePage() {
                 value={newRow.notes}
                 placeholder="notes"
                 onChange={(e) => setNewRow((v) => ({ ...v, notes: e.target.value }))}
-              />
-              <Inp
-                value={newRow.firstMasterSeason == null ? "" : String(newRow.firstMasterSeason)}
-                placeholder="master since"
-                inputMode="numeric"
-                onChange={(e) => setNewRow((v) => ({ ...v, firstMasterSeason: optYear(e.target.value) }))}
               />
               <Btn onClick={create}>Add</Btn>
             </div>

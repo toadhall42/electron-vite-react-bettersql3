@@ -1,6 +1,6 @@
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "../db-connect";
-import { results, drivers, events, sessions, entrants, seasons, pointModels } from "../schema";
+import { results, drivers, events, sessions, seasons, pointModels } from "../schema";
 import {
   InsertResultModel,
   UpdateResultModel,
@@ -202,10 +202,10 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const raceDriverIds = [...new Set(races.flatMap((r) => r.group).map((r) => r.driverId))];
   // Eligibility is by season year, so recalculating an old season uses who was a Master then
   const masterDriverIds = new Set(
-    tx.select({ driverId: entrants.driverid }).from(entrants)
-      .where(and(inArray(entrants.driverid, raceDriverIds), lte(entrants.firstMasterSeason, season.year)))
+    tx.select({ id: drivers.id }).from(drivers)
+      .where(and(inArray(drivers.id, raceDriverIds), lte(drivers.firstMasterSeason, season.year)))
       .all()
-      .map((e) => e.driverId)
+      .map((d) => d.id)
   );
 
   for (const { type, group: race } of races) {

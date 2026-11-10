@@ -17,8 +17,14 @@ import { Inp } from "@/components/common/input";
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, Driver>();
 const EMPTY_DRIVERS: Driver[] = [];
-const EMPTY_NEW = { firstname: "", lastname: "", suffix: "", active: true as boolean };
-const GRID = "grid grid-cols-[60px_1fr_1fr_100px_70px_180px] items-center px-4";
+const EMPTY_NEW = { firstname: "", lastname: "", suffix: "", active: true as boolean, firstMasterSeason: null as number | null };
+const GRID = "grid grid-cols-[60px_1fr_1fr_100px_70px_100px_180px] items-center px-4";
+
+// Blank clears the year rather than storing 0
+const optYear = (v: string) => {
+  const digits = v.replace(/\D/g, "");
+  return digits === "" ? null : Number(digits);
+};
 
 type SortKey = "firstname" | "lastname";
 type Sort = { key: SortKey; dir: "asc" | "desc" } | null;
@@ -157,6 +163,18 @@ export function DriverTablePage() {
               </span>
             ),
         }),
+        // Season year the driver first scores Masters points; blank = not a Master
+        col.accessor("firstMasterSeason", {
+          header: "Master Since",
+          cell: (info) =>
+            editingId === info.row.original.id ? (
+              <Inp key={`firstMasterSeason-${editingId}`} placeholder="year" inputMode="numeric"
+                defaultValue={editRef.current.firstMasterSeason == null ? "" : String(editRef.current.firstMasterSeason)}
+                onChange={(e) => { editRef.current = { ...editRef.current, firstMasterSeason: optYear(e.target.value) }; }} />
+            ) : (
+              <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>
+            ),
+        }),
         col.display({
           id: "actions",
           cell: (info) => {
@@ -283,6 +301,14 @@ export function DriverTablePage() {
               setNewRow((v) => ({ ...v, active: e.target.checked }))
             }
             className="w-4 h-4 accent-gray-600 cursor-pointer"
+          />
+          <Inp
+            value={newRow.firstMasterSeason == null ? "" : String(newRow.firstMasterSeason)}
+            placeholder="master since"
+            inputMode="numeric"
+            onChange={(e) =>
+              setNewRow((v) => ({ ...v, firstMasterSeason: optYear(e.target.value) }))
+            }
           />
           <Btn onClick={create}>Add</Btn>
         </div>

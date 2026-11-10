@@ -12,7 +12,10 @@ export const drivers = sqliteTable("drivers", {
   firstname: text().notNull(),
   lastname: text().notNull(),
   suffix: text(),
-  active: integer( { mode: 'boolean' }).notNull().default(true)
+  active: integer( { mode: 'boolean' }).notNull().default(true),
+  // Season year from which the driver scores Masters points (65 before that season's first race).
+  // Eligibility carries into every later season.
+  firstMasterSeason: integer(),
 });
 
 export const DriverModel = createSelectSchema(drivers);

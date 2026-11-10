@@ -397,7 +397,6 @@ export function SessionImportPage() {
         carclass: row.carClass,
         defaulttire: "",
         active: 1,
-        firstMasterSeason: null,
       } as InsertEntrant);
       if (entRes?.code !== 200) return `${row.driverName}: Driver added but Entrant failed (${entRes?.message ?? "no response"})`;
     }
