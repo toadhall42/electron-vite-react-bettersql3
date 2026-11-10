@@ -65,10 +65,11 @@ const entrantLabel = (e: EntrantWithDetails) => {
   return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
 };
 
-// "DQ" disqualifies but keeps the finishing position; a number reinstates the driver
-const parsePosition = (v: string): Partial<Session> =>
+// "DQ" disqualifies but keeps the recorded finishing position; a number reinstates the driver.
+// Runs on every keystroke, so the position always comes from the row, never from partial input like "D".
+const parsePosition = (v: string, finished: number): Partial<Session> =>
   v.trim().toUpperCase() === "DQ"
-    ? { disqualified: true }
+    ? { position: finished, disqualified: true }
     : { position: Number(v.replace(/\D/g, "")) || 0, disqualified: false };
 
 type WeatherState = { status: "loading" } | { status: "none" } | { status: "ok"; weather: Weather };
@@ -421,7 +422,7 @@ export function SessionTablePage() {
             editingId === info.row.original.id ? (
               <Inp key={`position-${editingId}`} placeholder="pos or DQ"
                 defaultValue={editRef.current.disqualified ? "DQ" : String(editRef.current.position ?? 0)}
-                onChange={(e) => { editRef.current = { ...editRef.current, ...parsePosition(e.target.value) }; }} />
+                onChange={(e) => { editRef.current = { ...editRef.current, ...parsePosition(e.target.value, info.row.original.position) }; }} />
             ) : info.row.original.disqualified ? (
               <span className="text-red-600 text-xs font-semibold"
                 title={info.getValue() ? `Finished P${info.getValue()}` : undefined}>DQ</span>
