@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `disqualified` integer DEFAULT false NOT NULL;

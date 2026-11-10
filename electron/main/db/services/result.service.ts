@@ -61,6 +61,16 @@ function groupSessions(rows: Session[]): Session[][] {
 
 const classOf = (s: Session) => (s.carClass ?? "").trim().toUpperCase();
 
+// Positions with disqualified drivers removed: a DQ scores as unplaced (0) and everyone
+// who finished behind them moves up one place per DQ
+function effectivePositions(group: Session[]): Map<number, number> {
+  const dqPositions = group.filter((r) => r.disqualified && r.position > 0).map((r) => r.position);
+  return new Map(group.map((r) => [
+    r.id,
+    r.disqualified || r.position <= 0 ? 0 : r.position - dqPositions.filter((p) => p < r.position).length,
+  ]));
+}
+
 const pointsFor = (table: number[], position: number) => (position > 0 ? table[position - 1] ?? 0 : 0);
 
 const TAG_DQ = "Disqualified: No Points";
@@ -175,7 +185,7 @@ const SCORED_TYPES: SessionType[] = ["Race", "Bonus Race"];
 
 // Builds one Result per driver per Race / Bonus Race session of the event, then scores it with the
 // event's point model. Starting position comes from the most recent Qualify session at or
-// before the race. Classification (DQ/DNF/DNS) is kept from the existing Result.
+// before the race. DQ comes from the session row; DNF/DNS are kept from the existing Result.
 function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const season = tx.select().from(seasons).where(eq(seasons.id, event.seasonId)).get();
   if (!season) throw new NotFoundError(`Event #${event.number} ${event.track} has no season`);
@@ -192,12 +202,17 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   for (const { type, group: race } of races) {
     const raceAt = sortKey(race[0]);
     const qualify = qualifies.filter((q) => sortKey(q[0]) <= raceAt).at(-1);
-    const finishers = race.filter((r) => r.position > 0).sort((a, b) => a.position - b.position);
+    const finish = effectivePositions(race);
+    const grid = qualify ? effectivePositions(qualify) : new Map<number, number>();
+    const pos = (r: Session) => finish.get(r.id) ?? 0;
+    const finishers = race.filter((r) => pos(r) > 0).sort((a, b) => pos(a) - pos(b));
     const raceResultIds: number[] = [];
 
     for (const row of race) {
-      const startingPosition = qualify?.find((q) => q.driverId === row.driverId)?.position ?? 0;
-      const positionInClass = row.position > 0
+      const qualifyRow = qualify?.find((q) => q.driverId === row.driverId);
+      const startingPosition = qualifyRow ? grid.get(qualifyRow.id) ?? 0 : 0;
+      const positionOverall = pos(row);
+      const positionInClass = positionOverall > 0
         ? finishers.filter((f) => classOf(f) === classOf(row)).findIndex((f) => f.id === row.id) + 1
         : 0;
       const values = {
@@ -205,10 +220,10 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
         eventId: event.id,
         sessionId: String(row.id),
         carClass: row.carClass,
-        positionOverall: row.position,
+        positionOverall,
         positionInClass,
         startingPosition,
-        positionsGained: startingPosition > 0 && row.position > 0 ? startingPosition - row.position : 0,
+        positionsGained: startingPosition > 0 && positionOverall > 0 ? startingPosition - positionOverall : 0,
       };
 
       // Prefer a Result already linked to this session row, else an unlinked one for the driver
@@ -216,13 +231,17 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
         existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === values.sessionId) ??
         existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
 
+      // The session row decides DQ; any other classification stays as entered on the Result
+      const kept = match?.classification === "DQ" ? null : match?.classification ?? null;
+      const classification = row.disqualified ? "DQ" : kept;
+
       if (match) {
         claimed.add(match.id);
-        tx.update(results).set(values).where(eq(results.id, match.id)).run();
+        tx.update(results).set({ ...values, classification }).where(eq(results.id, match.id)).run();
         raceResultIds.push(match.id);
         summary.updated++;
       } else {
-        const inserted = tx.insert(results).values(values).returning({ id: results.id }).get();
+        const inserted = tx.insert(results).values({ ...values, classification }).returning({ id: results.id }).get();
         raceResultIds.push(inserted.id);
         summary.inserted++;
       }

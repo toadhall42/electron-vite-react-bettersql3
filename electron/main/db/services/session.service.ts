@@ -24,6 +24,7 @@ const withDetails = () =>
       carClass: sessions.carClass,
       carNumber: sessions.carNumber,
       position: sessions.position,
+      disqualified: sessions.disqualified,
       bestLap: sessions.bestLap,
       driverName: drivers.name,
       eventTrack: events.track,

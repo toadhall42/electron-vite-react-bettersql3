@@ -23,7 +23,9 @@ export const sessions = sqliteTable("sessions", {
   eventId: integer().notNull(),
   carClass: text(),
   carNumber: text(),
+  // Finishing position as run; a DQ keeps it and drivers behind move up when scored
   position: integer().notNull().default(0),
+  disqualified: integer({ mode: "boolean" }).notNull().default(false),
   bestLap: text(),
 });
 

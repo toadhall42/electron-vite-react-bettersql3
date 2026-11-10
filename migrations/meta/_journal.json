@@ -169,6 +169,13 @@
       "when": 1794273423662,
       "tag": "0023_drop_masters_points",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1794282660894,
+      "tag": "0024_session_disqualified",
+      "breakpoints": true
     }
   ]
 }

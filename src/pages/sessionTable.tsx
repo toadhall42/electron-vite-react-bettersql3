@@ -43,6 +43,7 @@ const EMPTY_NEW = {
   carClass: "",
   carNumber: "",
   position: 0,
+  disqualified: false,
   bestLap: "",
 };
 
@@ -63,6 +64,12 @@ const entrantLabel = (e: EntrantWithDetails) => {
   const cls = entrantClass(e);
   return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
 };
+
+// "DQ" disqualifies but keeps the finishing position; a number reinstates the driver
+const parsePosition = (v: string): Partial<Session> =>
+  v.trim().toUpperCase() === "DQ"
+    ? { disqualified: true }
+    : { position: Number(v.replace(/\D/g, "")) || 0, disqualified: false };
 
 type WeatherState = { status: "loading" } | { status: "none" } | { status: "ok"; weather: Weather };
 
@@ -148,6 +155,7 @@ export function SessionTablePage() {
       carClass: row.carClass,
       carNumber: row.carNumber,
       position: row.position,
+      disqualified: row.disqualified,
       bestLap: row.bestLap,
     };
     setEditingId(row.id);
@@ -241,13 +249,22 @@ export function SessionTablePage() {
     [scopedData]
   );
 
-  // Sorted by finish position; position 0/null means did not start and sorts last
+  // Sorted by finish position (a DQ stays where they finished); position 0/null means did not start and sorts last
   const filteredData = useMemo(
     () => scopedData
       .filter((s) => nameFilter === "" || s.name === nameFilter)
       .sort((a, b) => (a.position || Infinity) - (b.position || Infinity)),
     [scopedData, nameFilter]
   );
+
+  // Shown positions skip DQ'd drivers: everyone who finished behind a DQ moves up one place
+  const shownPosition = useMemo(() => {
+    const dqPositions = filteredData.filter((s) => s.disqualified && s.position > 0).map((s) => s.position);
+    return new Map(filteredData.map((s) => [
+      s.id,
+      s.position > 0 ? s.position - dqPositions.filter((p) => p < s.position).length : 0,
+    ]));
+  }, [filteredData]);
 
   // Drop a name selection that no longer exists under the other filters
   useEffect(() => {
@@ -402,10 +419,14 @@ export function SessionTablePage() {
           header: "Pos",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp key={`position-${editingId}`} defaultValue={String(editRef.current.position ?? 0)}
-                onChange={(e) => { editRef.current = { ...editRef.current, position: Number(e.target.value) }; }} />
+              <Inp key={`position-${editingId}`} placeholder="pos or DQ"
+                defaultValue={editRef.current.disqualified ? "DQ" : String(editRef.current.position ?? 0)}
+                onChange={(e) => { editRef.current = { ...editRef.current, ...parsePosition(e.target.value) }; }} />
+            ) : info.row.original.disqualified ? (
+              <span className="text-red-600 text-xs font-semibold"
+                title={info.getValue() ? `Finished P${info.getValue()}` : undefined}>DQ</span>
             ) : (
-              <span className="text-gray-500 text-xs">{info.getValue() || "DNS"}</span>
+              <span className="text-gray-500 text-xs">{shownPosition.get(info.row.original.id) || "DNS"}</span>
             ),
         }),
         col.accessor("bestLap", {
@@ -438,7 +459,7 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, drivers, classFilter, classOptions, isBonus]
+    [debug, editingId, drivers, classFilter, classOptions, isBonus, shownPosition]
   );
 
   const table = useTable({ features, columns, data: displayData });
