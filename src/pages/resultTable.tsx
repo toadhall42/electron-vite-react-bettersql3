@@ -27,6 +27,7 @@ import {
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { Sel } from "@/components/common/select";
+import { useDebug } from "@/lib/stores/settings";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, ResultWithDetails>();
@@ -68,8 +69,8 @@ type DriverTotals = {
   totalPoints: number;
 };
 
-const gridCols = (eventWidth: number) =>
-  `44px 140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 55px 60px 70px 80px 1fr 155px`;
+const gridCols = (eventWidth: number, debug: boolean) =>
+  `${debug ? "44px " : ""}140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 55px 60px 70px 80px 1fr 155px`;
 
 // Monospace glyphs are 0.6em wide: text-xs (12px) for display, text-sm (14px) inside selects
 const MONO_XS = 7.2;
@@ -120,6 +121,7 @@ function txtInp(
 }
 
 export function ResultTablePage() {
+  const debug = useDebug();
   const [data, setData] = useState<ResultWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
@@ -233,10 +235,10 @@ export function ResultTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
+          })] : []),
 
         // Driver select
         col.display({
@@ -394,7 +396,7 @@ export function ResultTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, events, classFilter, classOptions]
+    [debug, editingId, drivers, events, classFilter, classOptions]
   );
 
   const seasonEvents = useMemo(
@@ -514,7 +516,7 @@ export function ResultTablePage() {
     const selectChars = Math.max("— event —".length, ...events.map((e) => eventLabel(e).length));
     return Math.ceil(Math.max(viewChars * MONO_XS, selectChars * MONO_SM + SELECT_CHROME));
   }, [events]);
-  const gridStyle = { gridTemplateColumns: gridCols(eventWidth) };
+  const gridStyle = { gridTemplateColumns: gridCols(eventWidth, debug) };
   // Fixed columns + event column + room for comments (was a flat 1760px with a 140px event column)
   const tableMinWidth = 1560 + eventWidth;
 
@@ -649,7 +651,7 @@ export function ResultTablePage() {
           {/* Add new row */}
           {!loading && (
             <div style={gridStyle} className={`${GRID} py-2 border-t border-gray-300 bg-gray-50`}>
-              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+              {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
               <Sel value={newRow.driverId || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, driverId: Number(e.target.value) }))}>
                 <option value="">— driver —</option>

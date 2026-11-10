@@ -1,17 +1,5 @@
 export {};
 
-export interface FsService {
-  read(path: string): Promise<any>;
-  write(path: string, content: string): Promise<any>;
-  readDir(path: string): Promise<any>;
-  makeDir(path: string): Promise<any>;
-  remove(path: string): Promise<any>;
-  rename(oldPath: string, newPath: string): Promise<any>;
-  copy(src: string, dest: string): Promise<any>;
-  exists(path: string): Promise<any>;
-  stat(path: string): Promise<any>;
-}
-
 export type {
   Driver,
   InsertDriver,
@@ -105,7 +93,6 @@ declare global {
   interface Window {
     api: {
       db: <T = unknown>(options: QueryOptions) => Promise<QueryResponse<T>>;
-      fs: FsService;
       env: "development" | "production";
       update: AppUpdate;
       logger: Logger;

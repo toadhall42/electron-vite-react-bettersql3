@@ -13,12 +13,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type Driver, type InsertDriver, type UpdateDriver } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
+import { useDebug } from "@/lib/stores/settings";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, Driver>();
 const EMPTY_DRIVERS: Driver[] = [];
 const EMPTY_NEW = { firstname: "", lastname: "", suffix: "", active: true as boolean, firstMasterSeason: null as number | null };
-const GRID = "grid grid-cols-[60px_1fr_1fr_100px_70px_100px_180px] items-center px-4";
+const GRID = "grid grid-cols-[1fr_1fr_100px_70px_100px_180px] items-center px-4";
+const GRID_ID = "grid grid-cols-[60px_1fr_1fr_100px_70px_100px_180px] items-center px-4";
 
 // Blank clears the year rather than storing 0
 const optYear = (v: string) => {
@@ -36,6 +38,8 @@ function fmtActive(value: unknown): string {
 }
 
 export function DriverTablePage() {
+  const debug = useDebug();
+  const grid = debug ? GRID_ID : GRID;
   const [data, setData] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setSaving] = useState(false);
@@ -110,12 +114,12 @@ export function DriverTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => (
-            <span className="text-gray-400 text-xs">{info.getValue()}</span>
-          ),
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => (
+              <span className="text-gray-400 text-xs">{info.getValue()}</span>
+            ),
+          })] : []),
         col.accessor("firstname", {
           header: () => sortHeader("firstname", "First Name"),
           cell: (info) =>
@@ -196,7 +200,7 @@ export function DriverTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, sort]
+    [debug, editingId, sort]
   );
 
   // Ties on the sorted name fall back to the other name
@@ -229,7 +233,7 @@ export function DriverTablePage() {
       <div className="flex-1 flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white min-h-0">
         {/* Column headers — pinned */}
         {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
+          <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
             {hg.headers.map((header) => (
               <span
                 key={header.id}
@@ -257,7 +261,7 @@ export function DriverTablePage() {
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
-                className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+                className={`${grid} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
               >
                 {row.getAllCells().map((cell) => (
                   <div key={cell.id}>
@@ -269,10 +273,8 @@ export function DriverTablePage() {
         </div>
 
         {/* Add new row — pinned at bottom of table */}
-        <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 flex-shrink-0`}>
-          <span className="text-gray-400 text-[10px] uppercase tracking-widest">
-            new
-          </span>
+        <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 flex-shrink-0`}>
+          {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
           <Inp
             value={newRow.firstname}
             placeholder="first"

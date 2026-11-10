@@ -3,7 +3,6 @@ import log from "./logger";
 import { addTray, createWindow } from "./window/create-window";
 import { loadEnv } from "../main/utils";
 import "./db/handlers/index";
-import "./fs/handlers/index";
 import { dbConnect } from "./db/db-connect";
 loadEnv();
 

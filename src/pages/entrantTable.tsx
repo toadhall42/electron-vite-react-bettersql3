@@ -22,13 +22,15 @@ import {
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
+import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, EntrantWithDetails>();
 const EMPTY: EntrantWithDetails[] = [];
 const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "" };
-const GRID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
+const GRID = "grid grid-cols-[150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
+const GRID_ID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
 
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
@@ -37,6 +39,8 @@ function fmtActive(value: unknown): string {
 }
 
 export function EntrantTablePage() {
+  const debug = useDebug();
+  const grid = debug ? GRID_ID : GRID;
   const [data, setData] = useState<EntrantWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -109,12 +113,12 @@ export function EntrantTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => (
-            <span className="text-gray-400 text-xs">{info.getValue()}</span>
-          ),
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => (
+              <span className="text-gray-400 text-xs">{info.getValue()}</span>
+            ),
+          })] : []),
         col.display({
           id: "driver",
           header: () => (
@@ -241,7 +245,7 @@ export function EntrantTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editVehicleId, drivers, vehicles, driverSort]
+    [debug, editingId, editVehicleId, drivers, vehicles, driverSort]
   );
 
   // Click cycles Driver: last name A–Z, Z–A, then back to the original order
@@ -272,7 +276,7 @@ export function EntrantTablePage() {
         <div className="border border-gray-200 rounded-lg overflow-clip min-w-[1040px] bg-white">
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
+            <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {hg.headers.map((header) => (
                 <span
                   key={header.id}
@@ -294,7 +298,7 @@ export function EntrantTablePage() {
             table.getRowModel().rows.map((row) => (
               <div
                 key={row.id}
-                className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+                className={`${grid} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
               >
                 {row.getAllCells().map((cell) => (
                   <div key={cell.id}>
@@ -306,8 +310,8 @@ export function EntrantTablePage() {
 
           {/* Add new row */}
           {!loading && (
-            <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
-              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+            <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
+              {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
               <Sel
                 value={newRow.driverid || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, driverid: Number(e.target.value) }))}

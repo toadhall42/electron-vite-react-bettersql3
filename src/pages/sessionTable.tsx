@@ -21,6 +21,7 @@ import {
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
+import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
 
 const features = tableFeatures({});
@@ -45,9 +46,11 @@ const SESSION_TYPES = ["Practice", "Qualify", "Race", "Bonus Race"] as const;
 type SessionType = (typeof SESSION_TYPES)[number];
 
 // id  driver  class  car#  pos  best  actions
-const GRID = "grid grid-cols-[44px_1fr_80px_60px_50px_100px_155px] items-center px-4";
+const GRID = "grid grid-cols-[1fr_80px_60px_50px_100px_155px] items-center px-4";
+const GRID_ID = "grid grid-cols-[44px_1fr_80px_60px_50px_100px_155px] items-center px-4";
 // Bonus races only track driver + class: id  driver  class  session  actions
-const BONUS_GRID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center px-4";
+const BONUS_GRID = "grid grid-cols-[1fr_120px_240px_155px] items-center px-4";
+const BONUS_GRID_ID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center px-4";
 const BONUS = "Bonus Race";
 const today = () => new Date().toISOString().slice(0, 10);
 const entrantClass = (e: EntrantWithDetails) => e.vehicleClass ?? e.carclass ?? "";
@@ -58,6 +61,7 @@ const entrantLabel = (e: EntrantWithDetails) => {
 };
 
 export function SessionTablePage() {
+  const debug = useDebug();
   const [data, setData] = useState<SessionWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [entrants, setEntrants] = useState<EntrantWithDetails[]>([]);
@@ -224,7 +228,7 @@ export function SessionTablePage() {
   const isBonus = typeFilter === BONUS;
   const bonusEventId = eventFilter !== "" ? eventFilter : sessionTemplate?.eventId;
   const canAddBonus = isBonus && bonusEventId != null;
-  const grid = isBonus ? BONUS_GRID : GRID;
+  const grid = isBonus ? (debug ? BONUS_GRID_ID : BONUS_GRID) : debug ? GRID_ID : GRID;
 
   // Default a new bonus row's name to the selected session
   useEffect(() => {
@@ -263,10 +267,10 @@ export function SessionTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
+          })] : []),
         col.display({
           id: "driver",
           header: "Driver",
@@ -357,7 +361,7 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, drivers, classFilter, classOptions, isBonus]
+    [debug, editingId, drivers, classFilter, classOptions, isBonus]
   );
 
   const table = useTable({ features, columns, data: displayData });
@@ -457,7 +461,7 @@ export function SessionTablePage() {
           {/* Add new row */}
           {!loading && canAddBonus && (
             <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
-              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+              {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
               <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
                 <option value="">— entrant —</option>
                 {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}
@@ -475,7 +479,7 @@ export function SessionTablePage() {
           )}
           {!loading && !isBonus && isSingleSession && (
             <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
-              <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+              {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
               <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
                 <option value="">— entrant —</option>
                 {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}

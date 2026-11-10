@@ -15,6 +15,7 @@ import {
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
+import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
 
 const features = tableFeatures({});
@@ -30,7 +31,8 @@ const EMPTY_NEW = {
 };
 
 // id  session  tempF  windMph  precipIn  pressureInHg  cloudCoverPct  actions
-const GRID = "grid grid-cols-[44px_160px_70px_75px_75px_105px_95px_155px] items-center px-4";
+const GRID = "grid grid-cols-[160px_70px_75px_75px_105px_95px_155px] items-center px-4";
+const GRID_ID = "grid grid-cols-[44px_160px_70px_75px_75px_105px_95px_155px] items-center px-4";
 
 function numInp(
   editingId: number | null,
@@ -55,6 +57,8 @@ function numInp(
 }
 
 export function WeatherTablePage() {
+  const debug = useDebug();
+  const grid = debug ? GRID_ID : GRID;
   const [data, setData] = useState<WeatherWithDetails[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,10 +116,10 @@ export function WeatherTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => <span className="text-gray-400 text-xs">{info.getValue()}</span>,
+          })] : []),
         col.display({
           id: "session",
           header: "Session",
@@ -172,7 +176,7 @@ export function WeatherTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, sessions]
+    [debug, editingId, sessions]
   );
 
   const table = useTable({ features, columns, data });
@@ -194,7 +198,7 @@ export function WeatherTablePage() {
       <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
         {/* Header */}
         {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+          <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50`}>
             {hg.headers.map((header) => (
               <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                 <table.FlexRender header={header} />
@@ -211,7 +215,7 @@ export function WeatherTablePage() {
           table.getRowModel().rows.map((row) => (
             <div
               key={row.id}
-              className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+              className={`${grid} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
             >
               {row.getAllCells().map((cell) => (
                 <div key={cell.id} className="min-w-0 overflow-hidden">
@@ -223,8 +227,8 @@ export function WeatherTablePage() {
 
         {/* Add new row */}
         {!loading && (
-          <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50`}>
-            <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+          <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50`}>
+            {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
             <Sel
               value={newRow.sessionId || ""}
               onChange={(e) => setNewRow((v) => ({ ...v, sessionId: Number(e.target.value) }))}

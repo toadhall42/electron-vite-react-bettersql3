@@ -13,7 +13,6 @@ const links = [
   { to: "/sessionImport", label: "Import Sessions" },
   { to: "/resultTable", label: "Points" },
   { to: "/weatherTable", label: "Weather" },
-  { to: "/fs", label: "FS Test" },
   { to: "/about", label: "About" },
 ];
 

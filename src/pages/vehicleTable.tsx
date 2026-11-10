@@ -14,19 +14,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type Vehicle, type InsertVehicle, type UpdateVehicle, type Driver } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
+import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, Vehicle>();
 const EMPTY: Vehicle[] = [];
 const EMPTY_NEW = { make: "", model: "", year: "", class: "", transponder: "", chassisid: "", currentDriver: "" };
-const GRID = "grid grid-cols-[60px_1fr_1fr_70px_100px_120px_120px_160px_180px] items-center px-4";
+const GRID = "grid grid-cols-[1fr_1fr_70px_100px_120px_120px_160px_180px] items-center px-4";
+const GRID_ID = "grid grid-cols-[60px_1fr_1fr_70px_100px_120px_120px_160px_180px] items-center px-4";
 
 // "First Last Suffix", skipping empty parts
 const driverFullName = (d: Driver) =>
   [d.firstname, d.lastname, d.suffix].filter(Boolean).join(" ");
 
 export function VehicleTablePage() {
+  const debug = useDebug();
+  const grid = debug ? GRID_ID : GRID;
   const [data, setData] = useState<Vehicle[]>([]);
   const [driverNames, setDriverNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,12 +80,12 @@ export function VehicleTablePage() {
   const columns = useMemo(
     () =>
       col.columns([
-        col.accessor("id", {
-          header: "ID",
-          cell: (info) => (
-            <span className="text-gray-400 text-xs">{info.getValue()}</span>
-          ),
-        }),
+        ...(debug ? [col.accessor("id", {
+            header: "ID",
+            cell: (info) => (
+              <span className="text-gray-400 text-xs">{info.getValue()}</span>
+            ),
+          })] : []),
         col.accessor("make", {
           header: "Make",
           cell: (info) =>
@@ -178,7 +182,7 @@ export function VehicleTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, driverNames]
+    [debug, editingId, driverNames]
   );
 
   const table = useTable({ features, columns, data });
@@ -203,7 +207,7 @@ export function VehicleTablePage() {
         <div className="h-full min-w-[1100px] flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white">
           {/* Column headers — pinned */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
+            <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
               {hg.headers.map((header) => (
                 <span
                   key={header.id}
@@ -227,7 +231,7 @@ export function VehicleTablePage() {
               table.getRowModel().rows.map((row) => (
                 <div
                   key={row.id}
-                  className={`${GRID} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
+                  className={`${grid} py-3 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors`}
                 >
                   {row.getAllCells().map((cell) => (
                     <div key={cell.id}>
@@ -239,8 +243,8 @@ export function VehicleTablePage() {
           </div>
 
           {/* Add new row — pinned at bottom of table */}
-          <div className={`${GRID} py-3 border-t border-gray-300 bg-gray-50 flex-shrink-0`}>
-            <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>
+          <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 flex-shrink-0`}>
+            {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
             <Inp
               value={newRow.make}
               placeholder="make"

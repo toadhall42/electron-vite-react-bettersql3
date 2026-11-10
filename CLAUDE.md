@@ -32,7 +32,7 @@ Renderer (React)
                     └─ Service layer (Drizzle queries)
 ```
 
-`window.api` also exposes `fs`, `update`, `logger`, and `createWindow`. All types are declared in `global.d.ts`.
+`window.api` also exposes `update`, `logger`, and `createWindow`. All types are declared in `global.d.ts`.
 
 ### Adding a new entity (e.g. "Widget")
 

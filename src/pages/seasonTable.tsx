@@ -20,6 +20,7 @@ import {
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { Sel } from "@/components/common/select";
+import { useDebug } from "@/lib/stores/settings";
 
 const EMPTY_SEASON: InsertSeason = { name: "", year: new Date().getFullYear(), pointModelId: null };
 const EMPTY_EVENT: Omit<InsertEvent, "id"> = {
@@ -32,7 +33,7 @@ const EMPTY_EVENT: Omit<InsertEvent, "id"> = {
 };
 
 // Each level indents further; header labels line up with their own level's grid.
-// Season: id  name  year  point model  events  actions
+// Season: id (expand toggle; number shown in debug)  name  year  point model  events  actions
 const SEASON_GRID = "grid grid-cols-[60px_1fr_100px_200px_90px_250px] items-center gap-2 px-4";
 // Event: id  track  sanction  dates  num  point model  actions
 const EVENT_GRID =
@@ -99,6 +100,7 @@ function Toggle({ open, disabled, onClick, children }: {
 }
 
 export function SeasonTablePage() {
+  const debug = useDebug();
   const [seasons, setSeasons] = useState<SeasonWithDetails[]>([]);
   const [pointModels, setPointModels] = useState<PointModel[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
@@ -285,7 +287,7 @@ export function SeasonTablePage() {
     return (
       <div className={`${SEASON_GRID} py-3 border-b border-gray-200/70 bg-white hover:bg-gray-50 transition-colors`}>
         <Toggle open={open} onClick={() => toggle(setOpenSeasons, g.id)}>
-          {s?.id ?? "—"}
+          {debug && (s?.id ?? "—")}
         </Toggle>
         {editingThis ? (
           <>
@@ -365,7 +367,7 @@ export function SeasonTablePage() {
               disabled={eventSessions.length === 0}
               onClick={() => toggle(setOpenEvents, e.id)}
             >
-              {e.id}
+              {debug && e.id}
             </Toggle>
           )}
           {editingThis ? (
@@ -568,7 +570,7 @@ export function SeasonTablePage() {
       <div className="flex-1 flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white min-h-0">
         {/* Header */}
         <div className={`${SEASON_GRID} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
-          {["ID", "Season", "Year", "Point Model", "Events", ""].map((h, i) => (
+          {[debug ? "ID" : "", "Season", "Year", "Point Model", "Events", ""].map((h, i) => (
             <span key={i} className={LABEL}>{h}</span>
           ))}
         </div>
@@ -589,7 +591,7 @@ export function SeasonTablePage() {
                   {renderSeason(g)}
                   {open && (g.events.length > 0 || addingTo === g.id) && (
                     <div className={`${EVENT_GRID} py-1 border-b border-gray-200/70 bg-gray-50/60`}>
-                      {["ID", "Track", "Sanction", "Dates", "Num", "Point Model", ""].map((h, i) => (
+                      {[debug ? "ID" : "", "Track", "Sanction", "Dates", "Num", "Point Model", ""].map((h, i) => (
                         <span key={i} className={LABEL}>{h}</span>
                       ))}
                     </div>
