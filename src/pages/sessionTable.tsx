@@ -8,6 +8,8 @@ import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
+import { getAllWeather, addWeather } from "@/lib/api/weather";
+import { fetchSessionWeather } from "@/lib/weather";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
@@ -18,11 +20,13 @@ import {
   type SessionWithDetails,
   type InsertSession,
   type UpdateSession,
+  type Weather,
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
+import { Cloud, CloudDrizzle, CloudRain, CloudSun, Droplets, Gauge, Sun, Wind, type LucideIcon } from "lucide-react";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, SessionWithDetails>();
@@ -60,6 +64,38 @@ const entrantLabel = (e: EntrantWithDetails) => {
   return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
 };
 
+type WeatherState = { status: "loading" } | { status: "none" } | { status: "ok"; weather: Weather };
+
+// Condition from stored readings: precipitation wins, otherwise cloud cover
+function weatherCondition(w: Weather): { Icon: LucideIcon; label: string } {
+  const precip = w.weatherPrecipIn ?? 0;
+  const cloud = w.weatherCloudCoverPct ?? 0;
+  if (precip > 0.1) return { Icon: CloudRain, label: "Rain" };
+  if (precip > 0) return { Icon: CloudDrizzle, label: "Drizzle" };
+  if (cloud < 25) return { Icon: Sun, label: "Clear" };
+  if (cloud < 70) return { Icon: CloudSun, label: "Partly cloudy" };
+  return { Icon: Cloud, label: "Cloudy" };
+}
+
+function WeatherConditions({ w }: { w: Weather }) {
+  const { Icon, label } = weatherCondition(w);
+  const tempF = `${(w.weatherTempF ?? 0).toFixed(0)}°F`;
+  const wind = `${(w.weatherWindMph ?? 0).toFixed(0)} mph`;
+  const precip = `${(w.weatherPrecipIn ?? 0).toFixed(2)}"`;
+  const pressure = `${(w.weatherPressureInHg ?? 0).toFixed(2)} inHg`;
+  const cloud = `${(w.weatherCloudCoverPct ?? 0).toFixed(0)}% cloud`;
+  const item = "flex items-center gap-1";
+  return (
+    <span className="flex items-center gap-4"
+      title={`${label} · ${tempF} · ${wind} wind · ${precip} precip · ${pressure} · ${cloud}`}>
+      <span className={`${item} text-gray-700`}><Icon size={16} />{tempF}</span>
+      <span className={item}><Wind size={14} className="text-gray-400" />{wind}</span>
+      <span className={item}><Droplets size={14} className="text-gray-400" />{precip}</span>
+      <span className={item}><Gauge size={14} className="text-gray-400" />{pressure}</span>
+    </span>
+  );
+}
+
 export function SessionTablePage() {
   const debug = useDebug();
   const [data, setData] = useState<SessionWithDetails[]>([]);
@@ -77,6 +113,7 @@ export function SessionTablePage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Session>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
+  const [weather, setWeather] = useState<WeatherState | null>(null);
 
   async function load() {
     setLoading(true);
@@ -229,6 +266,46 @@ export function SessionTablePage() {
   const bonusEventId = eventFilter !== "" ? eventFilter : sessionTemplate?.eventId;
   const canAddBonus = isBonus && bonusEventId != null;
   const grid = isBonus ? (debug ? BONUS_GRID_ID : BONUS_GRID) : debug ? GRID_ID : GRID;
+
+  // Weather belongs to the selected session's day + start time; bonus races have none.
+  // Stored weather rows point at one of the session's driver rows.
+  const weatherSession = !isBonus && sessionTemplate ? sessionTemplate : null;
+  const weatherKey = weatherSession
+    ? [weatherSession.eventId, weatherSession.sessionType, weatherSession.name,
+       weatherSession.sessionDate, weatherSession.sessionStartTime ?? ""].join("|")
+    : null;
+  useEffect(() => {
+    if (!weatherSession) { setWeather(null); return; }
+    let stale = false;
+    const rowIds = filteredData.map((s) => s.id);
+    (async () => {
+      setWeather({ status: "loading" });
+      const stored = ((await getAllWeather())?.data ?? []).find(
+        (w) => w.sessionId != null && rowIds.includes(w.sessionId));
+      if (stale) return;
+      if (stored) { setWeather({ status: "ok", weather: stored }); return; }
+
+      // Not stored yet: look it up and persist so it's only fetched once
+      const track = weatherSession.eventTrack ?? events.find((e) => e.id === weatherSession.eventId)?.track;
+      const w = track
+        ? await fetchSessionWeather(track, weatherSession.sessionDate, weatherSession.sessionStartTime ?? null)
+        : null;
+      if (stale) return;
+      if (!w) { setWeather({ status: "none" }); return; }
+      const row = {
+        sessionId: Math.min(...rowIds),
+        weatherTempF: w.tempF,
+        weatherWindMph: w.windMph,
+        weatherPrecipIn: w.precipIn,
+        weatherPressureInHg: w.pressureInHg,
+        weatherCloudCoverPct: w.cloudCoverPct,
+      };
+      await addWeather(row);
+      if (!stale) setWeather({ status: "ok", weather: { id: 0, ...row } });
+    })();
+    return () => { stale = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weatherKey]);
 
   // Default a new bonus row's name to the selected session
   useEffect(() => {
@@ -478,21 +555,39 @@ export function SessionTablePage() {
             </div>
           )}
           {!loading && !isBonus && isSingleSession && (
-            <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
-              {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
-              <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
-                <option value="">— entrant —</option>
-                {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}
-              </Sel>
-              <Inp value={newRow.carClass} placeholder="class"
-                onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
-              <Inp value={newRow.carNumber} placeholder="#"
-                onChange={(e) => setNewRow((v) => ({ ...v, carNumber: e.target.value }))} />
-              <Inp value={String(newRow.position)} placeholder="pos"
-                onChange={(e) => setNewRow((v) => ({ ...v, position: Number(e.target.value) }))} />
-              <Inp value={newRow.bestLap} placeholder="best"
-                onChange={(e) => setNewRow((v) => ({ ...v, bestLap: e.target.value }))} />
-              <Btn onClick={create}>Add</Btn>
+            <div className="sticky bottom-0 z-10">
+              <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50`}>
+                {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
+                <Sel value={newEntrantId || ""} onChange={(e) => pickEntrant(Number(e.target.value))}>
+                  <option value="">— entrant —</option>
+                  {entrantOptions.map((en) => <option key={en.id} value={en.id}>{entrantLabel(en)}</option>)}
+                </Sel>
+                <Inp value={newRow.carClass} placeholder="class"
+                  onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
+                <Inp value={newRow.carNumber} placeholder="#"
+                  onChange={(e) => setNewRow((v) => ({ ...v, carNumber: e.target.value }))} />
+                <Inp value={String(newRow.position)} placeholder="pos"
+                  onChange={(e) => setNewRow((v) => ({ ...v, position: Number(e.target.value) }))} />
+                <Inp value={newRow.bestLap} placeholder="best"
+                  onChange={(e) => setNewRow((v) => ({ ...v, bestLap: e.target.value }))} />
+                <Btn onClick={create}>Add</Btn>
+              </div>
+
+              {/* Weather for the session's day + start time */}
+              {weatherSession && weather && (
+                <div className="flex items-center gap-3 px-4 py-2 border-t border-gray-200 bg-gray-50 text-xs">
+                  <span className="text-gray-400">
+                    {weatherSession.sessionDate}{weatherSession.sessionStartTime ? ` ${weatherSession.sessionStartTime}` : ""}
+                  </span>
+                  <span className="text-gray-600">
+                    {weather.status === "loading"
+                      ? "Loading weather…"
+                      : weather.status === "ok"
+                        ? <WeatherConditions w={weather.weather} />
+                        : "Weather unavailable"}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

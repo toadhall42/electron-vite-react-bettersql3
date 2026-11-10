@@ -25,6 +25,7 @@
     "drizzle-zod": "^0.8.3",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
+    "lucide-react": "^1.70.0",
     "radix-ui": "^1.6.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
