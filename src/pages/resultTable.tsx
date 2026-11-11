@@ -689,10 +689,10 @@ export function ResultTablePage() {
 
       {seasonFilter !== "" && raceFilter !== "" && (
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
+        <div className="border border-gray-200 rounded-lg overflow-clip bg-white" style={{ minWidth: tableMinWidth }}>
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
-            <div key={hg.id} style={gridStyle} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50`}>
+            <div key={hg.id} style={gridStyle} className={`${GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
               {hg.headers.map((header) => (
                 <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                   <table.FlexRender header={header} />
@@ -724,7 +724,7 @@ export function ResultTablePage() {
 
           {/* Add new row */}
           {!loading && (
-            <div style={gridStyle} className={`${GRID} py-2 border-t border-gray-300 bg-gray-50`}>
+            <div style={gridStyle} className={`${GRID} py-2 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
               {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
               <Sel value={newRow.driverId || ""}
                 onChange={(e) => setNewRow((v) => ({ ...v, driverId: Number(e.target.value) }))}>
