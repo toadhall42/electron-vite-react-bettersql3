@@ -183,9 +183,22 @@ function pointModelFor(tx: Tx, event: Event, season: Season | undefined): PointM
 
 const SCORED_TYPES: SessionType[] = ["Race", "Bonus Race"];
 
+const sessionNumber = (name: string) => name.match(/#\s*(\d+)/)?.[1];
+
+// The grid for a race: every Qualify row whose number matches the race's ("Race #5" ↔ "Qualify #5"),
+// merged so a row with a mistyped start time still lands on the same grid. Falls back to the most
+// recent Qualify session at or before the race.
+function qualifyFor(race: Session[], qualifyRows: Session[], qualifies: Session[][]): Session[] | undefined {
+  // Bonus Race numbers run separately from Race numbers, so only Races match by number
+  const num = race[0].sessionType === "Race" ? sessionNumber(race[0].name) : undefined;
+  const byNumber = num ? qualifyRows.filter((q) => sessionNumber(q.name) === num) : [];
+  if (byNumber.length > 0) return byNumber;
+  const raceAt = sortKey(race[0]);
+  return qualifies.filter((q) => sortKey(q[0]) <= raceAt).at(-1);
+}
+
 // Builds one Result per driver per Race / Bonus Race session of the event, then scores it with the
-// event's point model. Starting position comes from the most recent Qualify session at or
-// before the race. DQ comes from the session row; DNF/DNS are kept from the existing Result.
+// event's point model. Starting position comes from the matching Qualify session (see qualifyFor). DQ comes from the session row; DNF/DNS are kept from the existing Result.
 function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const season = tx.select().from(seasons).where(eq(seasons.id, event.seasonId)).get();
   if (!season) throw new NotFoundError(`Event #${event.number} ${event.track} has no season`);
@@ -193,15 +206,15 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const rows = tx.select().from(sessions).where(eq(sessions.eventId, event.id)).all() as Session[];
   const races = SCORED_TYPES.flatMap((type) =>
     groupSessions(rows.filter((r) => r.sessionType === type)).map((group) => ({ type, group })));
-  const qualifies = groupSessions(rows.filter((r) => r.sessionType === "Qualify"));
+  const qualifyRows = rows.filter((r) => r.sessionType === "Qualify");
+  const qualifies = groupSessions(qualifyRows);
 
   const existing = tx.select().from(results).where(eq(results.eventId, event.id)).all();
   const claimed = new Set<number>();
   const summary: CalculateResultsSummary = { events: 1, races: races.length, inserted: 0, updated: 0 };
 
   for (const { type, group: race } of races) {
-    const raceAt = sortKey(race[0]);
-    const qualify = qualifies.filter((q) => sortKey(q[0]) <= raceAt).at(-1);
+    const qualify = qualifyFor(race, qualifyRows, qualifies);
     const finish = effectivePositions(race);
     const grid = qualify ? effectivePositions(qualify) : new Map<number, number>();
     const pos = (r: Session) => finish.get(r.id) ?? 0;
