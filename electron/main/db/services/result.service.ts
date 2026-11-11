@@ -7,7 +7,7 @@ import {
   type Result,
   type ResultWithDetails,
 } from "../schema/results";
-import type { Session, SessionType } from "../schema/sessions";
+import { SESSION_CLASSIFICATIONS, type Session, type SessionType } from "../schema/sessions";
 import type { Event } from "../schema/events";
 import type { Season } from "../schema/seasons";
 import type { PointModel } from "../schema/pointModels";
@@ -64,10 +64,11 @@ const classOf = (s: Session) => (s.carClass ?? "").trim().toUpperCase();
 // Positions with disqualified drivers removed: a DQ scores as unplaced (0) and everyone
 // who finished behind them moves up one place per DQ
 function effectivePositions(group: Session[]): Map<number, number> {
-  const dqPositions = group.filter((r) => r.disqualified && r.position > 0).map((r) => r.position);
+  const isDq = (r: Session) => r.classification === "DQ";
+  const dqPositions = group.filter((r) => isDq(r) && r.position > 0).map((r) => r.position);
   return new Map(group.map((r) => [
     r.id,
-    r.disqualified || r.position <= 0 ? 0 : r.position - dqPositions.filter((p) => p < r.position).length,
+    isDq(r) || r.position <= 0 ? 0 : r.position - dqPositions.filter((p) => p < r.position).length,
   ]));
 }
 
@@ -198,7 +199,8 @@ function qualifyFor(race: Session[], qualifyRows: Session[], qualifies: Session[
 }
 
 // Builds one Result per driver per Race / Bonus Race session of the event, then scores it with the
-// event's point model. Starting position comes from the matching Qualify session (see qualifyFor). DQ comes from the session row; DNF/DNS are kept from the existing Result.
+// event's point model. Starting position comes from the matching Qualify session (see qualifyFor).
+// DNS / DNF / DQ come from the session row; other classifications are kept from the existing Result.
 function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
   const season = tx.select().from(seasons).where(eq(seasons.id, event.seasonId)).get();
   if (!season) throw new NotFoundError(`Event #${event.number} ${event.track} has no season`);
@@ -244,9 +246,12 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
         existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === values.sessionId) ??
         existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
 
-      // The session row decides DQ; any other classification stays as entered on the Result
-      const kept = match?.classification === "DQ" ? null : match?.classification ?? null;
-      const classification = row.disqualified ? "DQ" : kept;
+      // The session row decides DNS / DNF / DQ; an unplaced Race row with no best lap and no
+      // classification never started (DNS). Any other classification stays as entered on the Result.
+      const fromSession = SESSION_CLASSIFICATIONS.some((c) => c === match?.classification);
+      const kept = fromSession ? null : match?.classification ?? null;
+      const didNotStart = type === "Race" && row.position <= 0 && !row.bestLap?.trim();
+      const classification = row.classification ?? (didNotStart ? "DNS" : kept);
 
       if (match) {
         claimed.add(match.id);

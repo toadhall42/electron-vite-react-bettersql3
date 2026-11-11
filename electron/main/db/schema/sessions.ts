@@ -9,6 +9,11 @@ import {
 export const SESSION_TYPES = ["Practice", "Qualify", "Race", "Bonus Race"] as const;
 export type SessionType = (typeof SESSION_TYPES)[number];
 
+// DQ keeps the finishing position (drivers behind move up when scored); DNS / DNF score no race points.
+// An unplaced Race row with no best lap is treated as DNS when no classification is set.
+export const SESSION_CLASSIFICATIONS = ["DNS", "DNF", "DQ"] as const;
+export type SessionClassification = (typeof SESSION_CLASSIFICATIONS)[number];
+
 // One row per driver per session. A session itself is identified by
 // event + sessionDate + sessionType + name (an event can run several per day).
 export const sessions = sqliteTable("sessions", {
@@ -25,7 +30,7 @@ export const sessions = sqliteTable("sessions", {
   carNumber: text(),
   // Finishing position as run; a DQ keeps it and drivers behind move up when scored
   position: integer().notNull().default(0),
-  disqualified: integer({ mode: "boolean" }).notNull().default(false),
+  classification: text({ enum: SESSION_CLASSIFICATIONS }),
   bestLap: text(),
 });
 

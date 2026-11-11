@@ -43,16 +43,18 @@ const EMPTY_NEW = {
   carClass: "",
   carNumber: "",
   position: 0,
-  disqualified: false,
+  classification: null as SessionClassification | null,
   bestLap: "",
 };
 
 const SESSION_TYPES = ["Practice", "Qualify", "Race", "Bonus Race"] as const;
 type SessionType = (typeof SESSION_TYPES)[number];
+const SESSION_CLASSIFICATIONS = ["DNS", "DNF", "DQ"] as const;
+type SessionClassification = (typeof SESSION_CLASSIFICATIONS)[number];
 
-// id  driver  class  car#  pos  best  actions
-const GRID = "grid grid-cols-[1fr_80px_60px_50px_100px_155px] items-center px-4";
-const GRID_ID = "grid grid-cols-[44px_1fr_80px_60px_50px_100px_155px] items-center px-4";
+// id  driver  class  car#  pos  status  best  actions
+const GRID = "grid grid-cols-[1fr_80px_60px_50px_80px_100px_155px] items-center px-4";
+const GRID_ID = "grid grid-cols-[44px_1fr_80px_60px_50px_80px_100px_155px] items-center px-4";
 // Bonus races only track driver + class: id  driver  class  session  actions
 const BONUS_GRID = "grid grid-cols-[1fr_120px_240px_155px] items-center px-4";
 const BONUS_GRID_ID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center px-4";
@@ -65,12 +67,21 @@ const entrantLabel = (e: EntrantWithDetails) => {
   return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
 };
 
-// "DQ" disqualifies but keeps the recorded finishing position; a number reinstates the driver.
-// Runs on every keystroke, so the position always comes from the row, never from partial input like "D".
-const parsePosition = (v: string, finished: number): Partial<Session> =>
-  v.trim().toUpperCase() === "DQ"
-    ? { position: finished, disqualified: true }
-    : { position: Number(v.replace(/\D/g, "")) || 0, disqualified: false };
+// With no classification set, an unplaced row with no best lap did not start (scoring treats it the same)
+const isImpliedDns = (s: Session) => !s.classification && !(s.position > 0) && !s.bestLap?.trim();
+const optClassification = (v: string) => (v === "" ? null : (v as SessionClassification));
+
+function ClassificationSelect({ value, onChange }: {
+  value: SessionClassification | null | undefined;
+  onChange: (v: SessionClassification | null) => void;
+}) {
+  return (
+    <Sel value={value ?? ""} onChange={(e) => onChange(optClassification(e.target.value))}>
+      <option value="">—</option>
+      {SESSION_CLASSIFICATIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+    </Sel>
+  );
+}
 
 type WeatherState = { status: "loading" } | { status: "none" } | { status: "ok"; weather: Weather };
 
@@ -156,7 +167,7 @@ export function SessionTablePage() {
       carClass: row.carClass,
       carNumber: row.carNumber,
       position: row.position,
-      disqualified: row.disqualified,
+      classification: row.classification,
       bestLap: row.bestLap,
     };
     setEditingId(row.id);
@@ -250,7 +261,7 @@ export function SessionTablePage() {
     [scopedData]
   );
 
-  // Sorted by finish position (a DQ stays where they finished); position 0/null means did not start and sorts last
+  // Sorted by finish position (a DQ stays where they finished); position 0/null sorts last
   const filteredData = useMemo(
     () => scopedData
       .filter((s) => nameFilter === "" || s.name === nameFilter)
@@ -260,7 +271,7 @@ export function SessionTablePage() {
 
   // Shown positions skip DQ'd drivers: everyone who finished behind a DQ moves up one place
   const shownPosition = useMemo(() => {
-    const dqPositions = filteredData.filter((s) => s.disqualified && s.position > 0).map((s) => s.position);
+    const dqPositions = filteredData.filter((s) => s.classification === "DQ" && s.position > 0).map((s) => s.position);
     return new Map(filteredData.map((s) => [
       s.id,
       s.position > 0 ? s.position - dqPositions.filter((p) => p < s.position).length : 0,
@@ -420,15 +431,38 @@ export function SessionTablePage() {
           header: "Pos",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp key={`position-${editingId}`} placeholder="pos or DQ"
-                defaultValue={editRef.current.disqualified ? "DQ" : String(editRef.current.position ?? 0)}
-                onChange={(e) => { editRef.current = { ...editRef.current, ...parsePosition(e.target.value, info.row.original.position) }; }} />
-            ) : info.row.original.disqualified ? (
-              <span className="text-red-600 text-xs font-semibold"
-                title={info.getValue() ? `Finished P${info.getValue()}` : undefined}>DQ</span>
+              <Inp key={`position-${editingId}`} placeholder="pos"
+                defaultValue={String(editRef.current.position ?? 0)}
+                onChange={(e) => { editRef.current = { ...editRef.current, position: Number(e.target.value.replace(/\D/g, "")) || 0 }; }} />
+            ) : info.row.original.classification === "DQ" ? (
+              // A DQ keeps the position they finished in; everyone behind moves up
+              <span className="text-gray-400 text-xs line-through"
+                title={info.getValue() ? `Finished P${info.getValue()}` : undefined}>{info.getValue() || "—"}</span>
             ) : (
-              <span className="text-gray-500 text-xs">{shownPosition.get(info.row.original.id) || "DNS"}</span>
+              <span className="text-gray-500 text-xs">{shownPosition.get(info.row.original.id) || "—"}</span>
             ),
+        }),
+        col.accessor("classification", {
+          header: "Status",
+          cell: (info) => {
+            const row = info.row.original;
+            if (editingId === row.id) {
+              return (
+                <Sel key={`classification-${editingId}`} defaultValue={editRef.current.classification ?? ""}
+                  onChange={(e) => { editRef.current = { ...editRef.current, classification: optClassification(e.target.value) }; }}>
+                  <option value="">—</option>
+                  {SESSION_CLASSIFICATIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </Sel>
+              );
+            }
+            const value = info.getValue();
+            if (value) {
+              return <span className={`text-xs font-semibold ${value === "DQ" ? "text-red-600" : "text-gray-600"}`}>{value}</span>;
+            }
+            return isImpliedDns(row)
+              ? <span className="text-gray-400 text-xs italic" title="No position or best lap">DNS</span>
+              : null;
+          },
         }),
         col.accessor("bestLap", {
           header: "Best Lap",
@@ -590,6 +624,8 @@ export function SessionTablePage() {
                   onChange={(e) => setNewRow((v) => ({ ...v, carNumber: e.target.value }))} />
                 <Inp value={String(newRow.position)} placeholder="pos"
                   onChange={(e) => setNewRow((v) => ({ ...v, position: Number(e.target.value) }))} />
+                <ClassificationSelect value={newRow.classification}
+                  onChange={(classification) => setNewRow((v) => ({ ...v, classification }))} />
                 <Inp value={newRow.bestLap} placeholder="best"
                   onChange={(e) => setNewRow((v) => ({ ...v, bestLap: e.target.value }))} />
                 <Btn onClick={create}>Add</Btn>

@@ -176,6 +176,20 @@
       "when": 1794282660894,
       "tag": "0024_session_disqualified",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1794367877975,
+      "tag": "0025_session_classification",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1794367886145,
+      "tag": "0026_drop_session_disqualified",
+      "breakpoints": true
     }
   ]
 }
