@@ -598,6 +598,9 @@ export function SessionTablePage() {
               {/* Weather for the session's day + start time */}
               {weatherSession && weather && (
                 <div className="flex items-center gap-3 px-4 py-2 border-t border-gray-200 bg-gray-50 text-xs">
+                  <span className="text-gray-700 font-medium">
+                    {weatherSession.eventTrack ?? events.find((e) => e.id === weatherSession.eventId)?.track ?? "—"}
+                  </span>
                   <span className="text-gray-400">
                     {weatherSession.sessionDate}{weatherSession.sessionStartTime ? ` ${weatherSession.sessionStartTime}` : ""}
                   </span>
