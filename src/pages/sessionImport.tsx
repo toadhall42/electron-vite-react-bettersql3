@@ -240,21 +240,26 @@ export function SessionImportPage() {
     return { kind: "fuzzy", suggestion: { key: best.key, driverId: best.e.driverid, entrantName: best.e.driverName!, score: best.score } };
   }
 
-  // Same event + type + date + name + start time + driver is the same session entry
-  function matchSession(driverId: number, sessionList: SessionWithDetails[]): { sessionRowId: number | null; message: string } {
-    const matches = sessionList.filter((s) =>
-      s.eventId === eventId &&
-      s.driverId === driverId &&
-      s.sessionType === sessionType &&
-      s.sessionDate === sessionDate &&
-      s.name === sessionName.trim() &&
-      (s.sessionStartTime ?? "") === startTime
-    );
+  // Same event + type + date + name + driver + class is the same session entry, so a re-import
+  // updates it rather than adding a duplicate. A row with the same start time is preferred.
+  function matchSession(driverId: number, carClass: string, sessionList: SessionWithDetails[]): { sessionRowId: number | null; message: string } {
+    const matches = sessionList
+      .filter((s) =>
+        s.eventId === eventId &&
+        s.driverId === driverId &&
+        normClass(s.carClass ?? "") === normClass(carClass) &&
+        s.sessionType === sessionType &&
+        s.sessionDate === sessionDate &&
+        s.name === sessionName.trim())
+      .sort((a, b) => Number((b.sessionStartTime ?? "") === startTime) - Number((a.sessionStartTime ?? "") === startTime));
     if (matches.length === 0) return { sessionRowId: null, message: "" };
-    return {
-      sessionRowId: matches[0].id,
-      message: matches.length > 1 ? "WARNING: Multiple Session entries found for Driver" : "",
-    };
+    const pick = matches[0];
+    const pickTime = pick.sessionStartTime ?? "";
+    const messages = [
+      matches.length > 1 ? "WARNING: Multiple Session entries found for Driver and class" : "",
+      pickTime !== startTime ? `existing entry has start time ${pickTime || "(none)"}` : "",
+    ];
+    return { sessionRowId: pick.id, message: messages.filter(Boolean).join("; ") };
   }
 
   function processJson(
@@ -296,7 +301,7 @@ export function SessionImportPage() {
         matched = { id: driver.id, name: driver.name, message: [`No ${carClass || "class"} Entrant`, message].filter(Boolean).join("; ") };
       }
 
-      const { sessionRowId, message: sessionMsg } = matchSession(matched.id, sessionList);
+      const { sessionRowId, message: sessionMsg } = matchSession(matched.id, carClass, sessionList);
       const warning = [matched.message, sessionMsg].filter(Boolean).join("; ");
       const action: Action = sessionRowId != null ? "update" : "new";
       const label = action === "update" ? "Update existing Session entry" : "Add new Session entry";
@@ -441,8 +446,9 @@ export function SessionImportPage() {
           ...entry(r),
         } as InsertSession)];
       }
+      // Driver + class already match, so only the result changes
       if (r.action === "update" && r.sessionRowId != null) {
-        return [updateSession(r.sessionRowId, entry(r))];
+        return [updateSession(r.sessionRowId, { position: r.position, bestLap: r.bestLap || null })];
       }
       return [];
     });
