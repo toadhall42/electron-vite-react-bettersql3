@@ -58,7 +58,7 @@ const GRID = "grid items-center px-2";
 const TOTALS_GRID = "grid items-center px-4";
 const TOTALS_BASE_COLS = "50px minmax(160px,1fr) 90px 70px 80px 80px 100px 80px";
 const TOTALS_BASE_COUNT = 8;
-const RACE_COL = "72px";
+const RACE_COL = "96px";
 const COLLAPSED_COL = "90px";
 
 type DriverTotals = {
