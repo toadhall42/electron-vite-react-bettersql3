@@ -179,11 +179,18 @@ export function WeatherTablePage() {
     [debug, editingId, sessions]
   );
 
-  const table = useTable({ features, columns, data });
+  // Oldest first by the linked session's date + start time; rows without a session sort last
+  const sortedData = useMemo(() => {
+    const when = new Map(sessions.map((s) => [s.id, `${s.sessionDate} ${s.sessionStartTime ?? ""}`]));
+    const key = (w: WeatherWithDetails) => (w.sessionId != null ? when.get(w.sessionId) : undefined) ?? "￿";
+    return [...data].sort((a, b) => key(a).localeCompare(key(b)) || a.id - b.id);
+  }, [data, sessions]);
+
+  const table = useTable({ features, columns, data: sortedData });
 
   return (
-    <div className="flex flex-col gap-6 overflow-auto">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6 h-full overflow-hidden">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
             dev
@@ -195,10 +202,11 @@ export function WeatherTablePage() {
         <Btn onClick={load}>Refresh</Btn>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+      <div className="flex-1 overflow-auto min-h-0">
+      <div className="border border-gray-200 rounded-lg overflow-clip bg-white">
         {/* Header */}
         {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50`}>
+          <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
             {hg.headers.map((header) => (
               <span key={header.id} className="text-[10px] uppercase tracking-widest text-gray-400">
                 <table.FlexRender header={header} />
@@ -227,7 +235,7 @@ export function WeatherTablePage() {
 
         {/* Add new row */}
         {!loading && (
-          <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50`}>
+          <div className={`${grid} py-3 border-t border-gray-300 bg-gray-50 sticky bottom-0 z-10`}>
             {debug && <span className="text-gray-400 text-[10px] uppercase tracking-widest">new</span>}
             <Sel
               value={newRow.sessionId || ""}
@@ -250,9 +258,10 @@ export function WeatherTablePage() {
           </div>
         )}
       </div>
+      </div>
 
       {!loading && (
-        <p className="text-[11px] text-gray-400">{data.length} weather records</p>
+        <p className="text-[11px] text-gray-400 flex-shrink-0">{data.length} weather records</p>
       )}
     </div>
   );
