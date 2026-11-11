@@ -28,6 +28,7 @@ import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { Sel } from "@/components/common/select";
 import { useDebug } from "@/lib/stores/settings";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, ResultWithDetails>();
@@ -53,8 +54,12 @@ const EMPTY_NEW = {
 
 // col widths: id  driver  event (sized to fit)  sess  class  pos  clPos  start  +/-  hc  race  bon  tot  bonR  tire  class'n  comments  actions
 const GRID = "grid items-center px-2";
-// Season totals: pos  driver  class  races  race  bonus  bonusRace  total
-const TOTALS_GRID = "grid grid-cols-[50px_1fr_90px_70px_80px_80px_100px_80px] items-center px-4";
+// Season totals: pos  driver  class  races  race  bonus  bonusRace  total, then optional per-race columns
+const TOTALS_GRID = "grid items-center px-4";
+const TOTALS_BASE_COLS = "50px minmax(160px,1fr) 90px 70px 80px 80px 100px 80px";
+const TOTALS_BASE_COUNT = 8;
+const RACE_COL = "72px";
+const COLLAPSED_COL = "90px";
 
 type DriverTotals = {
   key: string;
@@ -67,7 +72,15 @@ type DriverTotals = {
   bonusPoints: number;
   bonusRacePoints: number;
   totalPoints: number;
+  // Total points per race key (Race and Bonus Race sessions)
+  byRace: Record<string, number>;
 };
+
+type RaceGroup = "Race" | "Bonus Race";
+const RACE_GROUPS: { type: RaceGroup; label: string }[] = [
+  { type: "Race", label: "Races" },
+  { type: "Bonus Race", label: "Bonus Races" },
+];
 
 const gridCols = (eventWidth: number, debug: boolean) =>
   `${debug ? "44px " : ""}140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 55px 60px 70px 80px 1fr 155px`;
@@ -131,6 +144,7 @@ export function ResultTablePage() {
   const [raceFilter, setRaceFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [masterFilter, setMasterFilter] = useState<MasterFilter>("");
+  const [collapsed, setCollapsed] = useState<Record<RaceGroup, boolean>>({ "Race": false, "Bonus Race": false });
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -436,6 +450,10 @@ export function ResultTablePage() {
         `${a.sessionDate} ${a.sessionStartTime ?? ""}`.localeCompare(`${b.sessionDate} ${b.sessionStartTime ?? ""}`))
       .map(([key, r]) => ({
         key,
+        type: r.sessionType as RaceGroup,
+        eventTrack: r.eventTrack ?? "",
+        sessionName: r.sessionName ?? "",
+        sessionDate: r.sessionDate ?? "",
         label: [eventFilter === "" ? r.eventTrack : null, r.sessionName, r.sessionDate].filter(Boolean).join(" · "),
       }));
   }, [scopedData, eventFilter]);
@@ -449,9 +467,13 @@ export function ResultTablePage() {
       const key = `${r.driverId}|${carClass}`;
       const t = byDriver.get(key) ?? {
         key, driverId: r.driverId, rank: 0, driverName: r.driverName ?? "—", carClass, races: 0, raceKeys: new Set<string>(),
-        racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0,
+        racePoints: 0, bonusPoints: 0, bonusRacePoints: 0, totalPoints: 0, byRace: {} as Record<string, number>,
       };
       t.raceKeys.add(r.sessionId ? raceKey(r) : `row-${r.id}`);
+      if (r.sessionType === "Race" || r.sessionType === "Bonus Race") {
+        const k = raceKey(r);
+        t.byRace[k] = (t.byRace[k] ?? 0) + r.totalPoints;
+      }
       t.racePoints += r.racePoints;
       t.bonusPoints += r.bonusPoints;
       t.bonusRacePoints += r.bonusRacePoints;
@@ -522,6 +544,28 @@ export function ResultTablePage() {
 
   const table = useTable({ features, columns, data: filteredData });
 
+  // Per-race columns only for a whole season (All events + All races)
+  const showRaceCols = seasonFilter !== "" && eventFilter === "" && raceFilter === "";
+  const raceGroups = useMemo(
+    () => showRaceCols
+      ? RACE_GROUPS
+          .map((g) => ({ ...g, races: races.filter((r) => r.type === g.type) }))
+          .filter((g) => g.races.length > 0)
+      : [],
+    [showRaceCols, races]
+  );
+  const totalsGridStyle = {
+    gridTemplateColumns: [
+      TOTALS_BASE_COLS,
+      ...raceGroups.map((g) => collapsed[g.type] ? COLLAPSED_COL : g.races.map(() => RACE_COL).join(" ")),
+    ].join(" "),
+  };
+  const totalsMinWidth = 800 + raceGroups.reduce(
+    (w, g) => w + (collapsed[g.type] ? parseInt(COLLAPSED_COL) : g.races.length * parseInt(RACE_COL)), 0);
+  const groupSum = (t: DriverTotals, keys: string[]) =>
+    keys.reduce((sum, k) => sum + (t.byRace[k] ?? 0), 0);
+  const toggleGroup = (type: RaceGroup) => setCollapsed((c) => ({ ...c, [type]: !c[type] }));
+
   return (
     <div className="flex flex-col gap-6 h-full overflow-hidden">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -585,20 +629,45 @@ export function ResultTablePage() {
       {/* Season (or event) totals until a single race is chosen */}
       {seasonFilter !== "" && raceFilter === "" && (
         <div className="flex-1 overflow-auto min-h-0">
-          <div className="border border-gray-200 rounded-lg overflow-clip bg-white min-w-[800px]">
-            <div className={`${TOTALS_GRID} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
-              {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total"].map((h) => (
-                <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">
-                  {h === "Class" ? classHeader() : h === "Pos" && masterFilter !== "" ? "M Pos" : h}
-                </span>
-              ))}
+          <div className="border border-gray-200 rounded-lg overflow-clip bg-white" style={{ minWidth: totalsMinWidth }}>
+            <div className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+              {/* Collapsible group headers over the per-race columns */}
+              {raceGroups.length > 0 && (
+                <div style={totalsGridStyle} className={`${TOTALS_GRID} pt-2`}>
+                  <span style={{ gridColumn: `span ${TOTALS_BASE_COUNT}` }} />
+                  {raceGroups.map((g) => (
+                    <button key={g.type} type="button" onClick={() => toggleGroup(g.type)}
+                      title={collapsed[g.type] ? `Show ${g.label}` : `Hide ${g.label}`}
+                      style={{ gridColumn: `span ${collapsed[g.type] ? 1 : g.races.length}` }}
+                      className="flex items-center gap-1 border-b border-gray-300 pb-1 mx-1 text-[10px] uppercase tracking-widest text-gray-500 hover:text-gray-800 cursor-pointer whitespace-nowrap overflow-hidden">
+                      {collapsed[g.type] ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                      {g.label} ({g.races.length})
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={totalsGridStyle} className={`${TOTALS_GRID} py-2`}>
+                {["Pos", "Driver", "Class", "Races", "Race", "Bonus", "Bonus Race", "Total"].map((h) => (
+                  <span key={h} className="text-[10px] uppercase tracking-widest text-gray-400">
+                    {h === "Class" ? classHeader() : h === "Pos" && masterFilter !== "" ? "M Pos" : h}
+                  </span>
+                ))}
+                {raceGroups.map((g) => collapsed[g.type] ? (
+                  <span key={g.type} className="text-[10px] uppercase tracking-widest text-gray-400 px-1">Sum</span>
+                ) : g.races.map((r) => (
+                  <span key={r.key} title={r.label} className="text-[10px] leading-tight text-gray-400 px-1 min-w-0">
+                    <span className="block truncate uppercase tracking-wider">{r.eventTrack}</span>
+                    <span className="block truncate">{r.sessionName}</span>
+                  </span>
+                )))}
+              </div>
             </div>
             {loading && <div className="py-10 text-center text-xs text-gray-400">Loading...</div>}
             {!loading && visibleTotals.length === 0 && (
               <div className="py-10 text-center text-xs text-gray-400">No points for the selected filters</div>
             )}
             {!loading && visibleTotals.map((t) => (
-              <div key={t.key} className={`${TOTALS_GRID} py-2 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors text-xs`}>
+              <div key={t.key} style={totalsGridStyle} className={`${TOTALS_GRID} py-2 border-b border-gray-200/70 last:border-0 hover:bg-gray-50 transition-colors text-xs`}>
                 <span className="text-gray-400">{t.rank}</span>
                 <span className="text-gray-800 truncate">{t.driverName}</span>
                 <span className="text-gray-500">{t.carClass}</span>
@@ -607,6 +676,11 @@ export function ResultTablePage() {
                 <span className="text-gray-500">{t.bonusPoints}</span>
                 <span className="text-gray-500">{t.bonusRacePoints}</span>
                 <span className="text-gray-900 font-semibold">{t.totalPoints}</span>
+                {raceGroups.map((g) => collapsed[g.type] ? (
+                  <span key={g.type} className="text-gray-700 px-1">{groupSum(t, g.races.map((r) => r.key))}</span>
+                ) : g.races.map((r) => (
+                  <span key={r.key} className="text-gray-500 px-1">{t.byRace[r.key] ?? "—"}</span>
+                )))}
               </div>
             ))}
           </div>
