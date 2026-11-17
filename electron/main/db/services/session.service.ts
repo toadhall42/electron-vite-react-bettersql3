@@ -7,6 +7,7 @@ import {
   type Session,
   type SessionWithDetails,
 } from "../schema/sessions";
+import { z } from "zod";
 import { ValidationError, NotFoundError } from "../../utils/errors";
 
 const withDetails = () =>
@@ -60,6 +61,28 @@ const matchGroup = (k: SessionGroupKey) =>
       : eq(sessions.sessionStartTime, k.sessionStartTime)
   );
 
+const PositionModel = z.number().int().min(0);
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Places one row at a finishing position within its session and renumbers every placed row 1..N
+// in order, so positions never repeat or leave gaps. Rows already sharing a position keep their
+// id order. Position 0 takes the row out of the order (unplaced).
+function placeInSession(tx: Tx, id: number, position: number) {
+  const row = tx.select().from(sessions).where(eq(sessions.id, id)).get();
+  if (!row) throw new NotFoundError("Session not found");
+  const placed = tx.select().from(sessions).where(matchGroup(row)).all()
+    .filter((r) => r.id !== id && r.position > 0)
+    .sort((a, b) => a.position - b.position || a.id - b.id);
+  if (position > 0) placed.splice(Math.min(position, placed.length + 1) - 1, 0, row);
+  else if (row.position !== 0) tx.update(sessions).set({ position: 0 }).where(eq(sessions.id, id)).run();
+  placed.forEach((r, i) => {
+    if (r.position !== i + 1 || r.id === id) {
+      tx.update(sessions).set({ position: i + 1 }).where(eq(sessions.id, r.id)).run();
+    }
+  });
+}
+
 export class SessionService {
   static getAll(): SessionWithDetails[] {
     return withDetails().all() as SessionWithDetails[];
@@ -104,6 +127,7 @@ export class SessionService {
         tx.rollback();
         throw new Error("insert failed");
       }
+      return Number(r.lastInsertRowid);
     });
   }
 
@@ -118,5 +142,12 @@ export class SessionService {
         throw new NotFoundError("Session not found");
       }
     });
+  }
+
+  // Moves a driver to a finishing position, shifting the rest of the session to make room
+  static setPosition(id: number, position: unknown) {
+    const parsed = PositionModel.safeParse(position);
+    if (!parsed.success) throw new ValidationError(parsed.error);
+    db.transaction((tx) => placeInSession(tx, id, parsed.data));
   }
 }

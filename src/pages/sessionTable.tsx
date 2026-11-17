@@ -3,7 +3,7 @@ import {
   tableFeatures,
   useTable,
 } from "@tanstack/react-table";
-import { getAllSessions, addSession, updateSession, deleteSession } from "@/lib/api/session";
+import { getAllSessions, addSession, updateSession, deleteSession, setSessionPosition } from "@/lib/api/session";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEntrants } from "@/lib/api/entrant";
 import { getAllEvents } from "@/lib/api/event";
@@ -26,7 +26,7 @@ import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { useDebug } from "@/lib/stores/settings";
 import { Sel } from "@/components/common/select";
-import { Cloud, CloudDrizzle, CloudRain, CloudSun, Droplets, Gauge, Sun, Wind, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Cloud, CloudDrizzle, CloudRain, CloudSun, Droplets, Gauge, Sun, Wind, type LucideIcon } from "lucide-react";
 
 const features = tableFeatures({});
 const col = createColumnHelper<typeof features, SessionWithDetails>();
@@ -53,8 +53,9 @@ const SESSION_CLASSIFICATIONS = ["DNS", "DNF", "DQ"] as const;
 type SessionClassification = (typeof SESSION_CLASSIFICATIONS)[number];
 
 // id  driver  class  car#  pos  status  best  actions
-const GRID = "grid grid-cols-[1fr_80px_60px_50px_80px_100px_155px] items-center px-4";
-const GRID_ID = "grid grid-cols-[44px_1fr_80px_60px_50px_80px_100px_155px] items-center px-4";
+// The actions column is wider here to fit the move up / down arrows
+const GRID = "grid grid-cols-[1fr_80px_60px_50px_80px_100px_215px] items-center px-4";
+const GRID_ID = "grid grid-cols-[44px_1fr_80px_60px_50px_80px_100px_215px] items-center px-4";
 // Bonus races only track driver + class: id  driver  class  session  actions
 const BONUS_GRID = "grid grid-cols-[1fr_120px_240px_155px] items-center px-4";
 const BONUS_GRID_ID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center px-4";
@@ -66,6 +67,8 @@ const entrantLabel = (e: EntrantWithDetails) => {
   const cls = entrantClass(e);
   return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
 };
+
+const ARROW = "p-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent";
 
 // With no classification set, an unplaced row with no best lap did not start (scoring treats it the same)
 const isImpliedDns = (s: Session) => !s.classification && !(s.position > 0) && !s.bestLap?.trim();
@@ -178,9 +181,16 @@ export function SessionTablePage() {
     setEditingId(null);
   }
 
+  // A changed position goes through setSessionPosition, which shifts the rest of the session
+  // instead of leaving two drivers on the same position
   async function saveEdit() {
     if (editingId == null) return;
-    await updateSession(editingId, editRef.current as UpdateSession);
+    const { position, ...rest } = editRef.current;
+    const original = data.find((s) => s.id === editingId);
+    await updateSession(editingId, rest as UpdateSession);
+    if (!isBonus && position != null && position !== original?.position) {
+      await setSessionPosition(editingId, position);
+    }
     editRef.current = {};
     setEditingId(null);
     await load();
@@ -213,7 +223,11 @@ export function SessionTablePage() {
 
   async function create() {
     if (!isBonus) {
-      await addSession(newRow as InsertSession);
+      const res = await addSession(newRow as InsertSession);
+      // Slot the new driver in at the entered position; drivers from there down shift back one
+      if (res?.code === 200 && res.data != null && newRow.position > 0) {
+        await setSessionPosition(res.data, newRow.position);
+      }
       setNewRow({ ...EMPTY_NEW });
       setNewEntrantId(0);
       await load();
@@ -261,11 +275,12 @@ export function SessionTablePage() {
     [scopedData]
   );
 
-  // Sorted by finish position (a DQ stays where they finished); position 0/null sorts last
+  // Sorted by finish position (a DQ stays where they finished); position 0/null sorts last.
+  // Ties break by id, the same order setSessionPosition renumbers them in.
   const filteredData = useMemo(
     () => scopedData
       .filter((s) => nameFilter === "" || s.name === nameFilter)
-      .sort((a, b) => (a.position || Infinity) - (b.position || Infinity)),
+      .sort((a, b) => (a.position || Infinity) - (b.position || Infinity) || a.id - b.id),
     [scopedData, nameFilter]
   );
 
@@ -277,6 +292,17 @@ export function SessionTablePage() {
       s.position > 0 ? s.position - dqPositions.filter((p) => p < s.position).length : 0,
     ]));
   }, [filteredData]);
+
+  // Moves a driver one place up or down by giving them the neighbouring slot; the server renumbers
+  // the session 1..N, which also clears any duplicate positions. Unplaced rows move up to last place.
+  async function move(row: Session, dir: -1 | 1) {
+    const placed = filteredData.filter((s) => s.position > 0);
+    const idx = placed.findIndex((s) => s.id === row.id);
+    const target = idx < 0 ? (dir < 0 ? placed.length + 1 : 0) : idx + 1 + dir;
+    if (target < 1 || target > placed.length + (idx < 0 ? 1 : 0)) return;
+    await setSessionPosition(row.id, target);
+    await load();
+  }
 
   // Drop a name selection that no longer exists under the other filters
   useEffect(() => {
@@ -370,6 +396,23 @@ export function SessionTablePage() {
     }));
   }, [sessionTemplate]);
 
+  // Hidden under a class filter: the neighbours a move would pass may not be on screen
+  const moveButtons = (row: Session) => {
+    if (classFilter !== "") return null;
+    const placed = filteredData.filter((s) => s.position > 0);
+    const idx = placed.findIndex((s) => s.id === row.id);
+    const canUp = idx !== 0;
+    const canDown = idx >= 0 && idx < placed.length - 1;
+    return (
+      <span className="flex gap-0.5">
+        <button type="button" className={ARROW} disabled={!canUp} title="Move up one place"
+          aria-label="Move up" onClick={() => move(row, -1)}><ChevronUp size={14} /></button>
+        <button type="button" className={ARROW} disabled={!canDown} title="Move down one place"
+          aria-label="Move down" onClick={() => move(row, 1)}><ChevronDown size={14} /></button>
+      </span>
+    );
+  };
+
   const columns = useMemo(
     () =>
       col.columns([
@@ -432,6 +475,7 @@ export function SessionTablePage() {
           cell: (info) =>
             editingId === info.row.original.id ? (
               <Inp key={`position-${editingId}`} placeholder="pos"
+                title={`Finishing position as run, counting DQ'd drivers (shown as P${shownPosition.get(editingId) || "—"}). Other drivers shift to make room.`}
                 defaultValue={String(editRef.current.position ?? 0)}
                 onChange={(e) => { editRef.current = { ...editRef.current, position: Number(e.target.value.replace(/\D/g, "")) || 0 }; }} />
             ) : info.row.original.classification === "DQ" ? (
@@ -485,7 +529,8 @@ export function SessionTablePage() {
                 <Btn onClick={cancelEdit}>Cancel</Btn>
               </div>
             ) : (
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 items-center">
+                {!isBonus && moveButtons(info.row.original)}
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
                 <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
@@ -494,7 +539,7 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, drivers, classFilter, classOptions, isBonus, shownPosition]
+    [debug, editingId, drivers, classFilter, classOptions, isBonus, shownPosition, filteredData]
   );
 
   const table = useTable({ features, columns, data: displayData });

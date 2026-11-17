@@ -21,8 +21,9 @@ export const deleteSession = async (id: number) => {
   });
 };
 
+// Returns the new row's id
 export const addSession = async (data: InsertSession) => {
-  return window.api.db({
+  return window.api.db<number>({
     path: "db/session/add",
     params: data,
   });
@@ -32,6 +33,14 @@ export const updateSession = async (id: number, data: UpdateSession) => {
   return window.api.db({
     path: "db/session/update",
     params: { id, data },
+  });
+};
+
+// Moves a driver to a finishing position; the rest of the session shifts and is renumbered 1..N
+export const setSessionPosition = async (id: number, position: number) => {
+  return window.api.db({
+    path: "db/session/setPosition",
+    params: { id, position },
   });
 };
 

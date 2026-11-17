@@ -34,8 +34,7 @@ ipcMain.handle("db/session/delete", (_event, { id }): QueryResponse => {
 
 ipcMain.handle("db/session/add", (_event, data): QueryResponse => {
   try {
-    SessionService.insert(data);
-    return response.ok();
+    return response.ok({ data: SessionService.insert(data) });
   } catch (err: unknown) {
     log.error("[SESSION HANDLER] session/insert failed", { data, err });
     return toErrorResponse(err);
@@ -58,6 +57,16 @@ ipcMain.handle("db/session/updateGroup", (_event, arg): QueryResponse => {
     return response.ok();
   } catch (err: unknown) {
     log.error("[SESSION HANDLER] session/updateGroup failed", { arg, err });
+    return toErrorResponse(err);
+  }
+});
+
+ipcMain.handle("db/session/setPosition", (_event, { id, position }): QueryResponse => {
+  try {
+    SessionService.setPosition(id, position);
+    return response.ok();
+  } catch (err: unknown) {
+    log.error("[SESSION HANDLER] session/setPosition failed", { id, position, err });
     return toErrorResponse(err);
   }
 });
