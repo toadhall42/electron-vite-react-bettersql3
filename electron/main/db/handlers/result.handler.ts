@@ -61,6 +61,15 @@ ipcMain.handle("db/result/calculateForEvent", (_event, { eventId }): QueryRespon
   }
 });
 
+ipcMain.handle("db/result/calculateForRace", (_event, { sessionId }): QueryResponse => {
+  try {
+    return response.ok({ data: ResultService.calculateForRace(sessionId) });
+  } catch (err: unknown) {
+    log.error("[RESULT HANDLER] result/calculateForRace failed", { sessionId, err });
+    return toErrorResponse(err);
+  }
+});
+
 ipcMain.handle("db/result/calculateForSeason", (_event, { seasonId }): QueryResponse => {
   try {
     return response.ok({ data: ResultService.calculateForSeason(seasonId) });

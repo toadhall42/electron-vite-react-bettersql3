@@ -44,6 +44,14 @@ export const calculateResultsForEvent = async (eventId: number) => {
   });
 };
 
+// Scores one race session; sessionId is any session row of that race
+export const calculateResultsForRace = async (sessionId: number) => {
+  return window.api.db<CalculateResultsSummary>({
+    path: "db/result/calculateForRace",
+    params: { sessionId },
+  });
+};
+
 export const calculateResultsForSeason = async (seasonId: number) => {
   return window.api.db<CalculateResultsSummary>({
     path: "db/result/calculateForSeason",

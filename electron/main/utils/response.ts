@@ -3,6 +3,7 @@ import log from "../logger";
 import {
   BackupError,
   ConflictError,
+  MissingStartError,
   DatabaseError,
   NotFoundError,
   ValidationError,
@@ -51,6 +52,9 @@ export const toErrorResponse = (err: unknown): QueryResponse => {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof BackupError) {
+    return response.error({ code: err.code, message: err.message });
+  }
+  if (err instanceof MissingStartError) {
     return response.error({ code: err.code, message: err.message });
   }
   if (err instanceof ConflictError) {

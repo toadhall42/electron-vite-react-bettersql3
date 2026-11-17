@@ -61,3 +61,17 @@ export class ConflictError extends Error {
     }
   }
 }
+
+// Points can't be calculated: one or more entrants have no starting position
+export class MissingStartError extends Error {
+  code = 422;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "MissingStartError";
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, MissingStartError);
+    }
+  }
+}

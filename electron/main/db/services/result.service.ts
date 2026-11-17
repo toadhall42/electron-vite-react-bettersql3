@@ -11,7 +11,7 @@ import { SESSION_CLASSIFICATIONS, type Session, type SessionType } from "../sche
 import type { Event } from "../schema/events";
 import type { Season } from "../schema/seasons";
 import type { PointModel } from "../schema/pointModels";
-import { ValidationError, NotFoundError } from "../../utils/errors";
+import { ValidationError, NotFoundError, MissingStartError } from "../../utils/errors";
 
 const withDetails = () =>
   db
@@ -201,13 +201,17 @@ function qualifyFor(race: Session[], qualifyRows: Session[], qualifies: Session[
 // Builds one Result per driver per Race / Bonus Race session of the event, then scores it with the
 // event's point model. Starting position comes from the matching Qualify session (see qualifyFor).
 // DNS / DNF / DQ come from the session row; other classifications are kept from the existing Result.
-function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
+// A Race entrant who started but has no starting position (no Qualify time and none entered on the
+// Result) is added to `missing`; the caller aborts the calculation so nothing is scored.
+// With `onlySessionId`, only the race session containing that session row is calculated.
+function calculateEvent(tx: Tx, event: Event, missing: string[], onlySessionId?: number): CalculateResultsSummary {
   const season = tx.select().from(seasons).where(eq(seasons.id, event.seasonId)).get();
   if (!season) throw new NotFoundError(`Event #${event.number} ${event.track} has no season`);
   const model = pointModelFor(tx, event, season);
   const rows = tx.select().from(sessions).where(eq(sessions.eventId, event.id)).all() as Session[];
   const races = SCORED_TYPES.flatMap((type) =>
-    groupSessions(rows.filter((r) => r.sessionType === type)).map((group) => ({ type, group })));
+    groupSessions(rows.filter((r) => r.sessionType === type)).map((group) => ({ type, group })))
+    .filter(({ group }) => onlySessionId == null || group.some((r) => r.id === onlySessionId));
   const qualifyRows = rows.filter((r) => r.sessionType === "Qualify");
   const qualifies = groupSessions(qualifyRows);
 
@@ -224,8 +228,15 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
     const raceResultIds: number[] = [];
 
     for (const row of race) {
+      const sessionId = String(row.id);
+      // Prefer a Result already linked to this session row, else an unlinked one for the driver
+      const match =
+        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === sessionId) ??
+        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
+
+      // Grid slot from Qualify, else a starting position entered by hand on the Result
       const qualifyRow = qualify?.find((q) => q.driverId === row.driverId);
-      const startingPosition = qualifyRow ? grid.get(qualifyRow.id) ?? 0 : 0;
+      const startingPosition = (qualifyRow ? grid.get(qualifyRow.id) ?? 0 : 0) || (match?.startingPosition ?? 0);
       const positionOverall = pos(row);
       const positionInClass = positionOverall > 0
         ? finishers.filter((f) => classOf(f) === classOf(row)).findIndex((f) => f.id === row.id) + 1
@@ -233,7 +244,7 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
       const values = {
         driverId: row.driverId,
         eventId: event.id,
-        sessionId: String(row.id),
+        sessionId,
         carClass: row.carClass,
         positionOverall,
         positionInClass,
@@ -241,17 +252,19 @@ function calculateEvent(tx: Tx, event: Event): CalculateResultsSummary {
         positionsGained: startingPosition > 0 && positionOverall > 0 ? startingPosition - positionOverall : 0,
       };
 
-      // Prefer a Result already linked to this session row, else an unlinked one for the driver
-      const match =
-        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && r.sessionId === values.sessionId) ??
-        existing.find((r) => !claimed.has(r.id) && r.driverId === row.driverId && !r.sessionId);
-
       // The session row decides DNS / DNF / DQ; an unplaced Race row with no best lap and no
       // classification never started (DNS). Any other classification stays as entered on the Result.
       const fromSession = SESSION_CLASSIFICATIONS.some((c) => c === match?.classification);
       const kept = fromSession ? null : match?.classification ?? null;
       const didNotStart = type === "Race" && row.position <= 0 && !row.bestLap?.trim();
       const classification = row.classification ?? (didNotStart ? "DNS" : kept);
+
+      // Positions gained needs a real grid slot; a driver who never started (DNS) doesn't need one
+      if (type === "Race" && startingPosition <= 0 && classification !== "DNS") {
+        const name = tx.select({ name: drivers.name }).from(drivers).where(eq(drivers.id, row.driverId)).get()?.name;
+        const car = row.carNumber ? ` (#${row.carNumber})` : "";
+        missing.push(`${name ?? `Driver ${row.driverId}`}${car} — Event #${event.number} ${event.track}, ${row.name}`);
+      }
 
       if (match) {
         claimed.add(match.id);
@@ -278,6 +291,15 @@ const hasScoredSessions = (tx: Tx, eventId: number) =>
   tx.select({ id: sessions.id }).from(sessions)
     .where(and(eq(sessions.eventId, eventId), inArray(sessions.sessionType, SCORED_TYPES)))
     .limit(1).get() != null;
+
+// Throwing inside the transaction rolls it back, so no points are written
+function throwIfMissingStarts(missing: string[]) {
+  if (missing.length === 0) return;
+  throw new MissingStartError(
+    `Points were not calculated. ${missing.length} entrant(s) are missing from Qualifying or need a starting position set:\n` +
+    missing.map((m) => `• ${m}`).join("\n")
+  );
+}
 
 export class ResultService {
   static getAll(): ResultWithDetails[] {
@@ -331,7 +353,25 @@ export class ResultService {
       const event = tx.select().from(events).where(eq(events.id, eventId)).get();
       if (!event) throw new NotFoundError("Event not found");
       if (!hasScoredSessions(tx, eventId)) throw new NotFoundError("No Race or Bonus Race sessions found for this event");
-      return calculateEvent(tx, event);
+      const missing: string[] = [];
+      const summary = calculateEvent(tx, event, missing);
+      throwIfMissingStarts(missing);
+      return summary;
+    });
+  }
+
+  // Recalculates a single Race / Bonus Race session, identified by any of its session rows
+  static calculateForRace(sessionId: number): CalculateResultsSummary {
+    return db.transaction((tx) => {
+      const session = tx.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+      if (!session) throw new NotFoundError("Race session not found; recalculate the event instead");
+      if (!SCORED_TYPES.includes(session.sessionType)) throw new NotFoundError(`${session.name} is not a Race or Bonus Race`);
+      const event = tx.select().from(events).where(eq(events.id, session.eventId)).get();
+      if (!event) throw new NotFoundError("Event not found");
+      const missing: string[] = [];
+      const summary = calculateEvent(tx, event, missing, sessionId);
+      throwIfMissingStarts(missing);
+      return summary;
     });
   }
 
@@ -343,13 +383,15 @@ export class ResultService {
         .filter((e) => hasScoredSessions(tx, e.id));
       if (seasonEvents.length === 0) throw new NotFoundError("No Race or Bonus Race sessions found for this season");
       const summary: CalculateResultsSummary = { events: 0, races: 0, inserted: 0, updated: 0 };
+      const missing: string[] = [];
       for (const event of seasonEvents) {
-        const s = calculateEvent(tx, event);
+        const s = calculateEvent(tx, event, missing);
         summary.events += s.events;
         summary.races += s.races;
         summary.inserted += s.inserted;
         summary.updated += s.updated;
       }
+      throwIfMissingStarts(missing);
       return summary;
     });
   }

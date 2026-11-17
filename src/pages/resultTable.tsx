@@ -9,6 +9,7 @@ import {
   updateResult,
   deleteResult,
   calculateResultsForEvent,
+  calculateResultsForRace,
   calculateResultsForSeason,
 } from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
@@ -82,8 +83,14 @@ const RACE_GROUPS: { type: RaceGroup; label: string }[] = [
   { type: "Bonus Race", label: "Bonus Races" },
 ];
 
-const gridCols = (eventWidth: number, debug: boolean) =>
-  `${debug ? "44px " : ""}140px ${eventWidth}px 80px 70px 50px 50px 50px 45px 40px 60px 60px 55px 60px 70px 80px 1fr 155px`;
+// The ID and Session columns only show in debug mode; Bon Race only for a Bonus Race
+const gridCols = (eventWidth: number, debug: boolean, bonusRace: boolean) =>
+  [
+    debug && "44px", "140px", `${eventWidth}px`, debug && "80px", "90px", "50px", "50px", "50px", "45px", "40px",
+    "60px", "60px", "55px", bonusRace && "60px", "70px", "80px", "1fr", "155px",
+  ].filter(Boolean).join(" ");
+
+const headerTip = (label: string, tip: string) => () => <span title={tip} className="cursor-help">{label}</span>;
 
 // Monospace glyphs are 0.6em wide: text-xs (12px) for display, text-sm (14px) inside selects
 const MONO_XS = 7.2;
@@ -147,6 +154,8 @@ export function ResultTablePage() {
   const [collapsed, setCollapsed] = useState<Record<RaceGroup, boolean>>({ "Race": false, "Bonus Race": false });
   const [loading, setLoading] = useState(true);
   const [calcStatus, setCalcStatus] = useState("");
+  // Blocking calculation error (missing starting positions); shown until dismissed
+  const [calcError, setCalcError] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Result>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
@@ -205,10 +214,22 @@ export function ResultTablePage() {
   }
 
   // Scores the selected event, or every event in the selected season
+  // Scores the selected race, else the selected event, else every event in the selected season
   async function calculate() {
     if (seasonFilter === "") return;
+    if (raceFilter !== "" && selectedRace?.sessionId == null) {
+      setCalcStatus("Calculate failed: the selected race has no linked session rows; use Calculate Event");
+      return;
+    }
     setCalcStatus("Calculating...");
-    const res = eventFilter !== "" ? await calculateResultsForEvent(eventFilter) : await calculateResultsForSeason(seasonFilter);
+    const res = selectedRace?.sessionId != null
+      ? await calculateResultsForRace(selectedRace.sessionId)
+      : eventFilter !== "" ? await calculateResultsForEvent(eventFilter) : await calculateResultsForSeason(seasonFilter);
+    if (res?.code === 422) {
+      setCalcStatus("Calculate stopped: fix the starting positions and run it again");
+      setCalcError(res.message);
+      return;
+    }
     const scope = res?.data && res.data.events > 1 ? ` across ${res.data.events} events` : "";
     setCalcStatus(res?.code === 200 && res.data
       ? `Calculated ${res.data.races} race session(s)${scope}: ${res.data.inserted} added, ${res.data.updated} updated`
@@ -238,6 +259,15 @@ export function ResultTablePage() {
     if (year == null) return new Set<number>();
     return new Set(drivers.filter((d) => d.firstMasterSeason != null && d.firstMasterSeason <= year).map((d) => d.id));
   }, [drivers, seasons, seasonFilter]);
+
+  // The selected race: its event, its type (shows the Bon Race column) and a session row to calculate it by
+  const selectedRace = useMemo(() => {
+    if (raceFilter === "") return null;
+    const rows = data.filter((r) => raceKey(r) === raceFilter);
+    const linked = rows.map((r) => Number(r.sessionId)).find((id) => Number.isInteger(id) && id > 0);
+    return rows.length ? { eventId: rows[0].eventId, sessionType: rows[0].sessionType, sessionId: linked } : null;
+  }, [data, raceFilter]);
+  const isBonusRace = selectedRace?.sessionType === "Bonus Race";
 
   const classHeader = () => (
     <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={HEADER_SELECT}>
@@ -286,29 +316,29 @@ export function ResultTablePage() {
             ),
         }),
 
-        col.accessor("sessionId", {
+        ...(debug ? [col.accessor("sessionId", {
           header: "Session",
           cell: (info) =>
             editingId === info.row.original.id
               ? txtInp(`sessionId-${editingId}`, editRef.current.sessionId, "sessionId", editRef)
               : <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>,
-        }),
+        })] : []),
         col.accessor("carClass", {
-          header: classHeader,
+          header: () => <div className="pr-3">{classHeader()}</div>,
           cell: (info) =>
             editingId === info.row.original.id
-              ? txtInp(`carClass-${editingId}`, editRef.current.carClass, "carClass", editRef)
-              : <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>,
+              ? <div className="pr-3">{txtInp(`carClass-${editingId}`, editRef.current.carClass, "carClass", editRef)}</div>
+              : <span className="text-gray-500 text-xs block text-center pr-3">{info.getValue() ?? ""}</span>,
         }),
         col.accessor("positionOverall", {
-          header: "Pos",
+          header: headerTip("POA", "Position Over All"),
           cell: (info) =>
             editingId === info.row.original.id
               ? numInp(`positionOverall-${editingId}`, editRef.current.positionOverall, "positionOverall", editRef)
               : <span className="text-gray-500 text-xs">{info.getValue()}</span>,
         }),
         col.accessor("positionInClass", {
-          header: "Cl Pos",
+          header: headerTip("PIC", "Position In Class"),
           cell: (info) =>
             editingId === info.row.original.id
               ? numInp(`positionInClass-${editingId}`, editRef.current.positionInClass, "positionInClass", editRef)
@@ -342,7 +372,7 @@ export function ResultTablePage() {
             ),
         }),
         col.accessor("racePoints", {
-          header: "Race Pts",
+          header: "Race",
           cell: (info) =>
             editingId === info.row.original.id
               ? numInp(`racePoints-${editingId}`, editRef.current.racePoints, "racePoints", editRef)
@@ -362,13 +392,13 @@ export function ResultTablePage() {
               ? numInp(`totalPoints-${editingId}`, editRef.current.totalPoints, "totalPoints", editRef)
               : <span className="text-gray-500 text-xs font-medium">{info.getValue()}</span>,
         }),
-        col.accessor("bonusRacePoints", {
+        ...(isBonusRace ? [col.accessor("bonusRacePoints", {
           header: "Bon Race",
           cell: (info) =>
             editingId === info.row.original.id
               ? numInp(`bonusRacePoints-${editingId}`, editRef.current.bonusRacePoints, "bonusRacePoints", editRef)
               : <span className="text-gray-500 text-xs">{info.getValue()}</span>,
-        }),
+        })] : []),
         col.accessor("tireBrand", {
           header: "Tire",
           cell: (info) =>
@@ -410,7 +440,7 @@ export function ResultTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, drivers, events, classFilter, classOptions]
+    [debug, isBonusRace, editingId, drivers, events, classFilter, classOptions]
   );
 
   const seasonEvents = useMemo(
@@ -423,12 +453,12 @@ export function ResultTablePage() {
   // Which point model the Calculate button will apply
   const seasonModelLabel = useMemo(() => {
     const seasonModel = seasons.find((s) => s.id === seasonFilter)?.pointModelName;
-    const event = events.find((e) => e.id === eventFilter);
+    const event = events.find((e) => e.id === (selectedRace?.eventId ?? eventFilter));
     if (event?.pointModelName) return `the ${event.pointModelName} point model (event override)`;
-    const overrides = eventFilter === "" ? seasonEvents.filter((e) => e.pointModelName).length : 0;
+    const overrides = eventFilter === "" && !selectedRace ? seasonEvents.filter((e) => e.pointModelName).length : 0;
     const base = seasonModel ? `the ${seasonModel} point model` : "no point model — assign one on the Seasons page";
     return overrides ? `${base}; ${overrides} event(s) override it` : base;
-  }, [seasons, events, seasonEvents, seasonFilter, eventFilter]);
+  }, [seasons, events, seasonEvents, seasonFilter, eventFilter, selectedRace]);
 
   const scopedData = useMemo(() => {
     const seasonEventIds = new Set(seasonEvents.map((e) => e.id));
@@ -538,9 +568,9 @@ export function ResultTablePage() {
     const selectChars = Math.max("— event —".length, ...events.map((e) => eventLabel(e).length));
     return Math.ceil(Math.max(viewChars * MONO_XS, selectChars * MONO_SM + SELECT_CHROME));
   }, [events]);
-  const gridStyle = { gridTemplateColumns: gridCols(eventWidth, debug) };
-  // Fixed columns + event column + room for comments (was a flat 1760px with a 140px event column)
-  const tableMinWidth = 1560 + eventWidth;
+  const gridStyle = { gridTemplateColumns: gridCols(eventWidth, debug, isBonusRace) };
+  // Fixed columns + event column + room for comments, less the hidden Session / Bon Race columns
+  const tableMinWidth = 1580 + eventWidth - (debug ? 0 : 80) - (isBonusRace ? 0 : 60);
 
   const table = useTable({ features, columns, data: filteredData });
 
@@ -568,6 +598,22 @@ export function ResultTablePage() {
 
   return (
     <div className="flex flex-col gap-6 h-full overflow-hidden">
+      {calcError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" role="alertdialog" aria-modal="true">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-lg w-[560px] max-w-[90vw] max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-200 text-sm font-semibold text-gray-900 tracking-widest uppercase">
+              Missing starting position
+            </div>
+            <pre className="px-4 py-3 text-xs text-gray-700 whitespace-pre-wrap font-mono overflow-auto">{calcError}</pre>
+            <p className="px-4 pb-3 text-[11px] text-gray-500">
+              Add the entrant to the Qualify session, or set Start on their result, then run Calculate again.
+            </p>
+            <div className="px-4 py-3 border-t border-gray-200 flex justify-end">
+              <Btn onClick={() => setCalcError("")}>Dismiss</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-[10px] uppercase tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">
@@ -606,7 +652,7 @@ export function ResultTablePage() {
               <option value="noPodium">Masters, not class top {PODIUM}</option>
             </Sel>
           </div>
-          <Btn onClick={calculate}>{eventFilter === "" ? "Calculate Season" : "Calculate Event"}</Btn>
+          <Btn onClick={calculate}>{raceFilter !== "" ? "Calculate Race" : eventFilter === "" ? "Calculate Season" : "Calculate Event"}</Btn>
           <Btn onClick={load}>Refresh</Btn>
         </div>
       </div>
@@ -736,13 +782,15 @@ export function ResultTablePage() {
                 <option value="">— event —</option>
                 {events.map((e) => <option key={e.id} value={e.id}>{eventLabel(e)}</option>)}
               </Sel>
-              <Inp value={newRow.sessionId} placeholder="session"
-                onChange={(e) => setNewRow((v) => ({ ...v, sessionId: e.target.value }))} />
-              <Inp value={newRow.carClass} placeholder="class"
-                onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
-              <Inp value={String(newRow.positionOverall)} placeholder="pos"
+              {debug && <Inp value={newRow.sessionId} placeholder="session"
+                onChange={(e) => setNewRow((v) => ({ ...v, sessionId: e.target.value }))} />}
+              <div className="pr-3">
+                <Inp value={newRow.carClass} placeholder="class"
+                  onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
+              </div>
+              <Inp value={String(newRow.positionOverall)} placeholder="poa"
                 onChange={(e) => setNewRow((v) => ({ ...v, positionOverall: Number(e.target.value) }))} />
-              <Inp value={String(newRow.positionInClass)} placeholder="cl"
+              <Inp value={String(newRow.positionInClass)} placeholder="pic"
                 onChange={(e) => setNewRow((v) => ({ ...v, positionInClass: Number(e.target.value) }))} />
               <Inp value={String(newRow.startingPosition)} placeholder="st"
                 onChange={(e) => setNewRow((v) => ({ ...v, startingPosition: Number(e.target.value) }))} />
@@ -757,8 +805,8 @@ export function ResultTablePage() {
                 onChange={(e) => setNewRow((v) => ({ ...v, bonusPoints: Number(e.target.value) }))} />
               <Inp value={String(newRow.totalPoints)} placeholder="tot"
                 onChange={(e) => setNewRow((v) => ({ ...v, totalPoints: Number(e.target.value) }))} />
-              <Inp value={String(newRow.bonusRacePoints)} placeholder="br"
-                onChange={(e) => setNewRow((v) => ({ ...v, bonusRacePoints: Number(e.target.value) }))} />
+              {isBonusRace && <Inp value={String(newRow.bonusRacePoints)} placeholder="br"
+                onChange={(e) => setNewRow((v) => ({ ...v, bonusRacePoints: Number(e.target.value) }))} />}
               <Inp value={newRow.tireBrand} placeholder="tire"
                 onChange={(e) => setNewRow((v) => ({ ...v, tireBrand: e.target.value }))} />
               <Inp value={newRow.classification} placeholder="class'n"
