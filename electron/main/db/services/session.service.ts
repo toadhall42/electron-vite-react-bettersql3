@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db-connect";
-import { sessions, drivers, events } from "../schema";
+import { sessions, drivers, events, results } from "../schema";
 import {
   InsertSessionModel,
   UpdateSessionModel,
@@ -101,6 +101,8 @@ export class SessionService {
         tx.rollback();
         throw new NotFoundError("Session not found");
       }
+      // The driver's Result for this session row goes with it, so it stops counting toward points
+      tx.delete(results).where(eq(results.sessionId, String(id))).run();
     });
   }
 

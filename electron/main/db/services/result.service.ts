@@ -167,7 +167,7 @@ function scoreRace(race: Result[], model: PointModel): Map<number, PointsUpdate>
   return scored;
 }
 
-export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number };
+export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number; removed: number };
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -217,7 +217,7 @@ function calculateEvent(tx: Tx, event: Event, missing: string[], onlySessionId?:
 
   const existing = tx.select().from(results).where(eq(results.eventId, event.id)).all();
   const claimed = new Set<number>();
-  const summary: CalculateResultsSummary = { events: 1, races: races.length, inserted: 0, updated: 0 };
+  const summary: CalculateResultsSummary = { events: 1, races: races.length, inserted: 0, updated: 0, removed: 0 };
 
   for (const { type, group: race } of races) {
     const qualify = qualifyFor(race, qualifyRows, qualifies);
@@ -283,6 +283,15 @@ function calculateEvent(tx: Tx, event: Event, missing: string[], onlySessionId?:
     for (const [id, points] of scored) {
       tx.update(results).set(points).where(eq(results.id, id)).run();
     }
+  }
+
+  // A Result linked to a session row that no longer exists (deleted, or replaced by a re-import)
+  // would keep counting toward totals, so remove it. Hand-entered Results with no session link stay.
+  const rowIds = new Set(rows.map((r) => String(r.id)));
+  const orphans = existing.filter((r) => !claimed.has(r.id) && r.sessionId && !rowIds.has(r.sessionId)).map((r) => r.id);
+  if (orphans.length > 0) {
+    tx.delete(results).where(inArray(results.id, orphans)).run();
+    summary.removed = orphans.length;
   }
   return summary;
 }
@@ -382,7 +391,7 @@ export class ResultService {
       const seasonEvents = tx.select().from(events).where(eq(events.seasonId, seasonId)).all()
         .filter((e) => hasScoredSessions(tx, e.id));
       if (seasonEvents.length === 0) throw new NotFoundError("No Race or Bonus Race sessions found for this season");
-      const summary: CalculateResultsSummary = { events: 0, races: 0, inserted: 0, updated: 0 };
+      const summary: CalculateResultsSummary = { events: 0, races: 0, inserted: 0, updated: 0, removed: 0 };
       const missing: string[] = [];
       for (const event of seasonEvents) {
         const s = calculateEvent(tx, event, missing);
@@ -390,6 +399,7 @@ export class ResultService {
         summary.races += s.races;
         summary.inserted += s.inserted;
         summary.updated += s.updated;
+        summary.removed += s.removed;
       }
       throwIfMissingStarts(missing);
       return summary;

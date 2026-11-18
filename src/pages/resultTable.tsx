@@ -232,7 +232,8 @@ export function ResultTablePage() {
     }
     const scope = res?.data && res.data.events > 1 ? ` across ${res.data.events} events` : "";
     setCalcStatus(res?.code === 200 && res.data
-      ? `Calculated ${res.data.races} race session(s)${scope}: ${res.data.inserted} added, ${res.data.updated} updated`
+      ? `Calculated ${res.data.races} race session(s)${scope}: ${res.data.inserted} added, ${res.data.updated} updated` +
+        (res.data.removed ? `, ${res.data.removed} removed (session no longer exists)` : "")
       : `Calculate failed: ${res?.message ?? "no response"}`);
     await load();
   }

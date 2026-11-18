@@ -35,7 +35,7 @@ export const updateResult = async (id: number, data: UpdateResult) => {
   });
 };
 
-export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number };
+export type CalculateResultsSummary = { events: number; races: number; inserted: number; updated: number; removed: number };
 
 export const calculateResultsForEvent = async (eventId: number) => {
   return window.api.db<CalculateResultsSummary>({
