@@ -534,9 +534,17 @@ export function ResultTablePage() {
     (masterFilter === "" || masterDriverIds.has(driverId)) &&
     (masterFilter !== "noPodium" || !classPodiumDriverIds.has(driverId));
 
+  // Ordered by race (date + start time), then finishing position overall; unplaced (0) rows last.
+  // Results keep their original row order when a recalculation updates them, so sort explicitly.
   const filteredData = useMemo(
-    () => scopedData.filter((r) =>
-      (raceFilter === "" || raceKey(r) === raceFilter) && matchesColumnFilters(r.driverId, r.carClass)),
+    () => scopedData
+      .filter((r) =>
+        (raceFilter === "" || raceKey(r) === raceFilter) && matchesColumnFilters(r.driverId, r.carClass))
+      .sort((a, b) =>
+        `${a.sessionDate ?? ""} ${a.sessionStartTime ?? ""}`.localeCompare(`${b.sessionDate ?? ""} ${b.sessionStartTime ?? ""}`) ||
+        raceKey(a).localeCompare(raceKey(b)) ||
+        (a.positionOverall || Infinity) - (b.positionOverall || Infinity) ||
+        a.id - b.id),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scopedData, raceFilter, classFilter, masterFilter, masterDriverIds, classPodiumDriverIds]
   );
