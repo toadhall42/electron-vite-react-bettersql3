@@ -62,10 +62,17 @@ const BONUS_GRID_ID = "grid grid-cols-[44px_1fr_120px_240px_155px] items-center 
 const BONUS = "Bonus Race";
 const today = () => new Date().toISOString().slice(0, 10);
 const entrantClass = (e: EntrantWithDetails) => e.vehicleClass ?? e.carclass ?? "";
+// "Last, First" so pick lists read in the order they're sorted; falls back to the full name
+const lastFirst = (last: string | null | undefined, first: string | null | undefined, name: string | null | undefined) =>
+  last?.trim() ? [last.trim(), first?.trim()].filter(Boolean).join(", ") : name ?? "—";
+const byLastFirst = (a: { last?: string | null; first?: string | null }, b: { last?: string | null; first?: string | null }) =>
+  (a.last ?? "").localeCompare(b.last ?? "", undefined, { sensitivity: "base" }) ||
+  (a.first ?? "").localeCompare(b.first ?? "", undefined, { sensitivity: "base" });
 // A driver with several cars appears once per Entrant
 const entrantLabel = (e: EntrantWithDetails) => {
   const cls = entrantClass(e);
-  return cls ? `${e.driverName ?? "—"} (${cls})` : e.driverName ?? "—";
+  const name = lastFirst(e.driverLastName, e.driverFirstName, e.driverName);
+  return cls ? `${name} (${cls})` : name;
 };
 
 const ARROW = "p-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent";
@@ -215,10 +222,16 @@ export function SessionTablePage() {
 
   const entrantOptions = useMemo(
     () => [...entrants].sort((a, b) =>
-      (a.driverLastName ?? "").localeCompare(b.driverLastName ?? "") ||
-      (a.driverFirstName ?? "").localeCompare(b.driverFirstName ?? "") ||
+      byLastFirst({ last: a.driverLastName, first: a.driverFirstName }, { last: b.driverLastName, first: b.driverFirstName }) ||
       entrantClass(a).localeCompare(entrantClass(b))),
     [entrants]
+  );
+
+  // The Edit row's driver picker, in the same last-name order
+  const driverOptions = useMemo(
+    () => [...drivers].sort((a, b) =>
+      byLastFirst({ last: a.lastname, first: a.firstname }, { last: b.lastname, first: b.firstname })),
+    [drivers]
   );
 
   async function create() {
@@ -428,7 +441,7 @@ export function SessionTablePage() {
               <Sel key={`driverId-${editingId}`} defaultValue={editRef.current.driverId ?? ""}
                 onChange={(e) => { editRef.current = { ...editRef.current, driverId: Number(e.target.value) }; }}>
                 <option value="">— driver —</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {driverOptions.map((d) => <option key={d.id} value={d.id}>{lastFirst(d.lastname, d.firstname, d.name)}</option>)}
               </Sel>
             ) : (
               <span className="text-gray-800 text-xs truncate block">{info.row.original.driverName ?? "—"}</span>
@@ -539,7 +552,7 @@ export function SessionTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, drivers, classFilter, classOptions, isBonus, shownPosition, filteredData]
+    [debug, editingId, drivers, driverOptions, classFilter, classOptions, isBonus, shownPosition, filteredData]
   );
 
   const table = useTable({ features, columns, data: displayData });
