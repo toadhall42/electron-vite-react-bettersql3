@@ -10,3 +10,7 @@ export function Sel({ children, ...props }: Props) {
     </select>
   );
 }
+
+// Width that fits the longest option label: Sel is text-sm monospace (0.6em = 8.4px/char) plus padding + arrow
+export const selectWidth = (labels: string[]) =>
+  Math.ceil(Math.max(0, ...labels.map((l) => l.length)) * 8.4 + 48);

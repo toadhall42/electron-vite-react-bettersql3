@@ -58,3 +58,13 @@ export const calculateResultsForSeason = async (seasonId: number) => {
     params: { seasonId },
   });
 };
+
+export type SetTireDefaultsSummary = { updated: number; alreadySet: number; noDefault: number; ambiguous: number };
+
+// Fills blank Tire on these results from each driver's Entrant default tire
+export const setResultTireDefaults = async (ids: number[]) => {
+  return window.api.db<SetTireDefaultsSummary>({
+    path: "db/result/setTireDefaults",
+    params: { ids },
+  });
+};

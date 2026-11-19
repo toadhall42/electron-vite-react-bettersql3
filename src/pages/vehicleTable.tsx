@@ -10,6 +10,8 @@ import {
   deleteVehicle,
 } from "@/lib/api/vehicle";
 import { getAllDrivers } from "@/lib/api/driver";
+import { getPickLists, EMPTY_PICK_LISTS, type PickLists } from "@/lib/api/pickListOption";
+import { pickOptions } from "@/components/common/pickOptions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Vehicle, type InsertVehicle, type UpdateVehicle, type Driver } from "../../global.d";
 import { Btn } from "@/components/common/btn";
@@ -21,8 +23,8 @@ const features = tableFeatures({});
 const col = createColumnHelper<typeof features, Vehicle>();
 const EMPTY: Vehicle[] = [];
 const EMPTY_NEW = { make: "", model: "", year: "", class: "", transponder: "", chassisid: "", currentDriver: "" };
-const GRID = "grid grid-cols-[1fr_1fr_70px_100px_120px_120px_160px_180px] items-center px-4";
-const GRID_ID = "grid grid-cols-[60px_1fr_1fr_70px_100px_120px_120px_160px_180px] items-center px-4";
+const GRID = "grid grid-cols-[1fr_1fr_70px_100px_120px_120px_160px_210px] items-center px-4";
+const GRID_ID = "grid grid-cols-[60px_1fr_1fr_70px_100px_120px_120px_160px_210px] items-center px-4";
 
 // "First Last Suffix", skipping empty parts
 const driverFullName = (d: Driver) =>
@@ -33,14 +35,16 @@ export function VehicleTablePage() {
   const grid = debug ? GRID_ID : GRID;
   const [data, setData] = useState<Vehicle[]>([]);
   const [driverNames, setDriverNames] = useState<string[]>([]);
+  const [pickLists, setPickLists] = useState<PickLists>(EMPTY_PICK_LISTS);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const editRef = useRef<Partial<Vehicle>>({});
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
-    setLoading(true);
-    const [res, drvRes] = await Promise.all([getAllVehicles(), getAllDrivers()]);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
+    const [res, drvRes, pickRes] = await Promise.all([getAllVehicles(), getAllDrivers(), getPickLists()]);
+    setPickLists(pickRes);
     setData((res?.data as Vehicle[]) ?? EMPTY);
     setDriverNames(((drvRes?.data as Driver[]) ?? []).map(driverFullName));
     setLoading(false);
@@ -66,9 +70,12 @@ export function VehicleTablePage() {
     await load();
   }
 
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteVehicle(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   async function create() {
@@ -120,8 +127,10 @@ export function VehicleTablePage() {
           header: "Class",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp key={`class-${editingId}`} defaultValue={editRef.current.class ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, class: e.target.value }; }} />
+              <Sel key={`class-${editingId}`} defaultValue={editRef.current.class ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, class: e.target.value }; }}>
+                {pickOptions(pickLists.carClass, editRef.current.class)}
+              </Sel>
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -171,18 +180,18 @@ export function VehicleTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             );
           },
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, driverNames]
+    [debug, editingId, driverNames, pickLists]
   );
 
   const table = useTable({ features, columns, data });
@@ -204,7 +213,7 @@ export function VehicleTablePage() {
 
       {/* Table — fills remaining space; scrolls sideways when narrow */}
       <div className="flex-1 overflow-x-auto min-h-0">
-        <div className="h-full min-w-[1100px] flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white">
+        <div className="h-full min-w-[1130px] flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-white">
           {/* Column headers — pinned */}
           {table.getHeaderGroups().map((hg) => (
             <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0`}>
@@ -260,11 +269,12 @@ export function VehicleTablePage() {
               placeholder="year"
               onChange={(e) => setNewRow((v) => ({ ...v, year: e.target.value }))}
             />
-            <Inp
+            <Sel
               value={newRow.class}
-              placeholder="class"
               onChange={(e) => setNewRow((v) => ({ ...v, class: e.target.value }))}
-            />
+            >
+              {pickOptions(pickLists.carClass, newRow.class)}
+            </Sel>
             <Inp
               value={newRow.transponder}
               placeholder="transponder"

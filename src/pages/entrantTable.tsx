@@ -11,6 +11,8 @@ import {
 } from "@/lib/api/entrant";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllVehicles } from "@/lib/api/vehicle";
+import { getPickLists, EMPTY_PICK_LISTS, type PickLists } from "@/lib/api/pickListOption";
+import { pickOptions } from "@/components/common/pickOptions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
@@ -29,8 +31,8 @@ const features = tableFeatures({});
 const col = createColumnHelper<typeof features, EntrantWithDetails>();
 const EMPTY: EntrantWithDetails[] = [];
 const EMPTY_NEW = { driverid: 0, vehicleid: 0, number: "", carclass: "", defaulttire: "", active: 1, notes: "" };
-const GRID = "grid grid-cols-[150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
-const GRID_ID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_170px] items-center px-4";
+const GRID = "grid grid-cols-[150px_190px_80px_80px_100px_60px_1fr_210px] items-center px-4";
+const GRID_ID = "grid grid-cols-[50px_150px_190px_80px_80px_100px_60px_1fr_210px] items-center px-4";
 
 function fmtActive(value: unknown): string {
   if (value === true || value === 1) return "Yes";
@@ -44,6 +46,7 @@ export function EntrantTablePage() {
   const [data, setData] = useState<EntrantWithDetails[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [pickLists, setPickLists] = useState<PickLists>(EMPTY_PICK_LISTS);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [driverSort, setDriverSort] = useState<"asc" | "desc" | null>("asc");
@@ -53,12 +56,14 @@ export function EntrantTablePage() {
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
-    setLoading(true);
-    const [entRes, drvRes, vehRes] = await Promise.all([
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
+    const [entRes, drvRes, vehRes, pickRes] = await Promise.all([
       getAllEntrants(),
       getAllDrivers(),
       getAllVehicles(),
+      getPickLists(),
     ]);
+    setPickLists(pickRes);
     setData((entRes?.data as EntrantWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setVehicles((vehRes?.data as Vehicle[]) ?? []);
@@ -99,9 +104,12 @@ export function EntrantTablePage() {
     await load();
   }
 
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteEntrant(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   async function create() {
@@ -186,8 +194,10 @@ export function EntrantTablePage() {
               editVehicleId ? (
                 <Inp key={`carclass-${editingId}-${editVehicleId}`} value={vehicleClass(editVehicleId) ?? ""} disabled readOnly />
               ) : (
-                <Inp key={`carclass-${editingId}`} defaultValue={editRef.current.carclass ?? ""}
-                  onChange={(e) => { editRef.current = { ...editRef.current, carclass: e.target.value }; }} />
+                <Sel key={`carclass-${editingId}`} defaultValue={editRef.current.carclass ?? ""}
+                  onChange={(e) => { editRef.current = { ...editRef.current, carclass: e.target.value || null }; }}>
+                  {pickOptions(pickLists.carClass, editRef.current.carclass)}
+                </Sel>
               )
             ) : (
               <span className="text-gray-500 text-xs">{info.row.original.vehicleClass ?? info.getValue() ?? ""}</span>
@@ -197,8 +207,10 @@ export function EntrantTablePage() {
           header: "Tire",
           cell: (info) =>
             editingId === info.row.original.id ? (
-              <Inp key={`defaulttire-${editingId}`} defaultValue={editRef.current.defaulttire ?? ""}
-                onChange={(e) => { editRef.current = { ...editRef.current, defaulttire: e.target.value }; }} />
+              <Sel key={`defaulttire-${editingId}`} defaultValue={editRef.current.defaulttire ?? ""}
+                onChange={(e) => { editRef.current = { ...editRef.current, defaulttire: e.target.value }; }}>
+                {pickOptions(pickLists.tireBrand, editRef.current.defaulttire)}
+              </Sel>
             ) : (
               <span className="text-gray-500 text-xs">{info.getValue()}</span>
             ),
@@ -234,18 +246,18 @@ export function EntrantTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             );
           },
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, editingId, editVehicleId, drivers, vehicles, driverSort]
+    [debug, editingId, editVehicleId, drivers, vehicles, driverSort, pickLists]
   );
 
   // Click cycles Driver: last name A–Z, Z–A, then back to the original order
@@ -273,7 +285,7 @@ export function EntrantTablePage() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="border border-gray-200 rounded-lg overflow-clip min-w-[1040px] bg-white">
+        <div className="border border-gray-200 rounded-lg overflow-clip min-w-[1080px] bg-white">
           {/* Header */}
           {table.getHeaderGroups().map((hg) => (
             <div key={hg.id} className={`${grid} py-2 border-b border-gray-200 bg-gray-50 sticky top-0 z-10`}>
@@ -340,17 +352,22 @@ export function EntrantTablePage() {
                 placeholder="number"
                 onChange={(e) => setNewRow((v) => ({ ...v, number: e.target.value }))}
               />
-              <Inp
-                value={newRow.carclass}
-                placeholder="class"
-                disabled={!!newRow.vehicleid}
-                onChange={(e) => setNewRow((v) => ({ ...v, carclass: e.target.value }))}
-              />
-              <Inp
+              {newRow.vehicleid ? (
+                <Inp value={newRow.carclass} placeholder="class" disabled readOnly />
+              ) : (
+                <Sel
+                  value={newRow.carclass}
+                  onChange={(e) => setNewRow((v) => ({ ...v, carclass: e.target.value }))}
+                >
+                  {pickOptions(pickLists.carClass, newRow.carclass)}
+                </Sel>
+              )}
+              <Sel
                 value={newRow.defaulttire}
-                placeholder="tire"
                 onChange={(e) => setNewRow((v) => ({ ...v, defaulttire: e.target.value }))}
-              />
+              >
+                {pickOptions(pickLists.tireBrand, newRow.defaulttire)}
+              </Sel>
               <input
                 type="checkbox"
                 checked={newRow.active === 1}

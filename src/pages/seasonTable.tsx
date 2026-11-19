@@ -120,7 +120,7 @@ export function SeasonTablePage() {
   const firstLoad = useRef(true);
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [snRes, evRes, sesRes, pmRes] = await Promise.all([
       getAllSeasons(),
       getAllEvents(),

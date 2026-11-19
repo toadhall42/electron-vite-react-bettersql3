@@ -25,7 +25,7 @@ import {
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
 import { useDebug } from "@/lib/stores/settings";
-import { Sel } from "@/components/common/select";
+import { Sel, selectWidth } from "@/components/common/select";
 import { ChevronDown, ChevronUp, Cloud, CloudDrizzle, CloudRain, CloudSun, Droplets, Gauge, Sun, Wind, type LucideIcon } from "lucide-react";
 
 const features = tableFeatures({});
@@ -145,7 +145,7 @@ export function SessionTablePage() {
   const [weather, setWeather] = useState<WeatherState | null>(null);
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [sesRes, drvRes, entRes, evtRes, seaRes] = await Promise.all([
       getAllSessions(),
       getAllDrivers(),
@@ -203,9 +203,12 @@ export function SessionTablePage() {
     await load();
   }
 
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteSession(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   // Choosing an Entrant fills the row's driver, class and car number
@@ -540,12 +543,12 @@ export function SessionTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5 items-center">
                 {!isBonus && moveButtons(info.row.original)}
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             );
           },
@@ -569,7 +572,7 @@ export function SessionTablePage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-48">
+          <div style={{ width: selectWidth(["All seasons", ...seasons.map((s) => s.name)]) }}>
             <Sel value={seasonFilter}
               onChange={(e) => { setSeasonFilter(e.target.value === "" ? "" : Number(e.target.value)); setEventFilter(""); }}>
               <option value="">All seasons</option>

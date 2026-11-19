@@ -19,8 +19,8 @@ const features = tableFeatures({});
 const col = createColumnHelper<typeof features, Driver>();
 const EMPTY_DRIVERS: Driver[] = [];
 const EMPTY_NEW = { firstname: "", lastname: "", suffix: "", active: true as boolean, firstMasterSeason: null as number | null };
-const GRID = "grid grid-cols-[1fr_1fr_100px_70px_100px_180px] items-center px-4";
-const GRID_ID = "grid grid-cols-[60px_1fr_1fr_100px_70px_100px_180px] items-center px-4";
+const GRID = "grid grid-cols-[1fr_1fr_100px_70px_100px_210px] items-center px-4";
+const GRID_ID = "grid grid-cols-[60px_1fr_1fr_100px_70px_100px_210px] items-center px-4";
 
 // Blank clears the year rather than storing 0
 const optYear = (v: string) => {
@@ -66,7 +66,7 @@ export function DriverTablePage() {
   }
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const res = await getAllDrivers();
     setData((res?.data as Driver[]) ?? EMPTY_DRIVERS);
     setLoading(false);
@@ -96,9 +96,12 @@ export function DriverTablePage() {
     setSaving(false);
   }
 
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteDriver(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   async function create() {
@@ -187,13 +190,11 @@ export function DriverTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>
-                  Delete
-                </Btn>
               </div>
             );
           },

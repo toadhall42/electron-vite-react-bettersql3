@@ -78,3 +78,12 @@ ipcMain.handle("db/result/calculateForSeason", (_event, { seasonId }): QueryResp
     return toErrorResponse(err);
   }
 });
+
+ipcMain.handle("db/result/setTireDefaults", (_event, { ids }): QueryResponse => {
+  try {
+    return response.ok({ data: ResultService.setTireDefaults(ids) });
+  } catch (err: unknown) {
+    log.error("[RESULT HANDLER] result/setTireDefaults failed", { ids, err });
+    return toErrorResponse(err);
+  }
+});

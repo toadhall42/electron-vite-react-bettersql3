@@ -151,7 +151,7 @@ export function SessionImportPage() {
   const [status, setStatus] = useState(IDLE_MSG);
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [seaRes, evtRes, sesRes, drvRes, entRes] = await Promise.all([
       getAllSeasons(),
       getAllEvents(),

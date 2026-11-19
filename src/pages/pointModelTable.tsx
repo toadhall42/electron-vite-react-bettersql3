@@ -130,7 +130,7 @@ export function PointModelTablePage() {
   const [newDraft, setNewDraft] = useState<Draft>({ ...EMPTY_DRAFT });
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [pmRes, snRes, evRes] = await Promise.all([getAllPointModels(), getAllSeasons(), getAllEvents()]);
     setModels(((pmRes?.data as PointModelWithUsage[]) ?? []).sort((a, b) => a.name.localeCompare(b.name)));
     setSeasons(((snRes?.data as SeasonWithDetails[]) ?? []).sort((a, b) => b.year - a.year));

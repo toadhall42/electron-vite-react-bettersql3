@@ -11,11 +11,13 @@ import {
   calculateResultsForEvent,
   calculateResultsForRace,
   calculateResultsForSeason,
+  setResultTireDefaults,
 } from "@/lib/api/result";
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
-import { getAllPickListOptions } from "@/lib/api/pickListOption";
+import { getPickLists, EMPTY_PICK_LISTS, type PickLists } from "@/lib/api/pickListOption";
+import { pickOptions } from "@/components/common/pickOptions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
@@ -25,11 +27,10 @@ import {
   type SeasonWithDetails,
   type InsertResult,
   type UpdateResult,
-  type PickListOption,
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
-import { Sel } from "@/components/common/select";
+import { Sel, selectWidth } from "@/components/common/select";
 import { useDebug } from "@/lib/stores/settings";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
@@ -89,7 +90,7 @@ const RACE_GROUPS: { type: RaceGroup; label: string }[] = [
 const gridCols = (eventWidth: number, debug: boolean, bonusRace: boolean) =>
   [
     debug && "44px", "140px", `${eventWidth}px`, debug && "80px", "90px", "50px", "50px", "50px", "45px", "40px",
-    "60px", "60px", "55px", bonusRace && "60px", "70px", "80px", "1fr", "155px",
+    "60px", "60px", "55px", bonusRace && "60px", "70px", "80px", "1fr", "210px",
   ].filter(Boolean).join(" ");
 
 const headerTip = (label: string, tip: string) => () => <span title={tip} className="cursor-help">{label}</span>;
@@ -124,17 +125,6 @@ function numInp(
       onChange={(e) => { ref.current = { ...ref.current, [field]: Number(e.target.value) }; }}
       className="w-full"
     />
-  );
-}
-
-// Drop-down of Settings-managed values; a stored value no longer in the list stays selectable
-function pickOptions(values: string[], current: string | null | undefined) {
-  const all = current && !values.includes(current) ? [current, ...values] : values;
-  return (
-    <>
-      <option value="">—</option>
-      {all.map((v) => <option key={v} value={v}>{v}</option>)}
-    </>
   );
 }
 
@@ -177,7 +167,7 @@ export function ResultTablePage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
   const [seasons, setSeasons] = useState<SeasonWithDetails[]>([]);
-  const [pickLists, setPickLists] = useState<{ carClass: string[]; tireBrand: string[] }>({ carClass: [], tireBrand: [] });
+  const [pickLists, setPickLists] = useState<PickLists>(EMPTY_PICK_LISTS);
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
   const [raceFilter, setRaceFilter] = useState("");
@@ -193,19 +183,15 @@ export function ResultTablePage() {
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [resRes, drvRes, evtRes, seaRes, pickRes] = await Promise.all([
       getAllResults(),
       getAllDrivers(),
       getAllEvents(),
       getAllSeasons(),
-      getAllPickListOptions(),
+      getPickLists(),
     ]);
-    const picks = (pickRes?.data as PickListOption[]) ?? [];
-    setPickLists({
-      carClass: picks.filter((o) => o.list === "carClass").map((o) => o.value),
-      tireBrand: picks.filter((o) => o.list === "tireBrand").map((o) => o.value),
-    });
+    setPickLists(pickRes);
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
@@ -276,9 +262,29 @@ export function ResultTablePage() {
     await load();
   }
 
+  // Fills blank Tire on the rows in view from each driver's Entrant default; set tires are kept
+  async function setTireDefaults() {
+    const ids = filteredData.map((r) => r.id);
+    if (ids.length === 0) return;
+    setCalcStatus("Setting tire defaults...");
+    const res = await setResultTireDefaults(ids);
+    if (res?.code !== 200 || !res.data) {
+      setCalcStatus(`Set Tire Defaults failed: ${res?.message ?? "no response"}`);
+      return;
+    }
+    const d = res.data;
+    setCalcStatus(
+      `Set Tire Defaults: ${d.updated} set, ${d.alreadySet} already had a tire, ${d.noDefault} with no Entrant default` +
+      (d.ambiguous ? `, ${d.ambiguous} skipped (driver's Entrants have different default tires)` : ""));
+    await load();
+  }
+
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteResult(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   async function create() {
@@ -468,11 +474,11 @@ export function ResultTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             );
           },
@@ -617,7 +623,7 @@ export function ResultTablePage() {
   }, [events]);
   const gridStyle = { gridTemplateColumns: gridCols(eventWidth, debug, isBonusRace) };
   // Fixed columns + event column + room for comments, less the hidden Session / Bon Race columns
-  const tableMinWidth = 1580 + eventWidth - (debug ? 0 : 80) - (isBonusRace ? 0 : 60);
+  const tableMinWidth = 1635 + eventWidth - (debug ? 0 : 80) - (isBonusRace ? 0 : 60);
 
   const table = useTable({ features, columns, data: filteredData });
 
@@ -671,7 +677,7 @@ export function ResultTablePage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-48">
+          <div style={{ width: selectWidth(["All seasons", ...seasons.map((s) => s.name)]) }}>
             <Sel value={seasonFilter}
               onChange={(e) => { setSeasonFilter(e.target.value === "" ? "" : Number(e.target.value)); setEventFilter(""); }}>
               <option value="">All seasons</option>
@@ -700,6 +706,10 @@ export function ResultTablePage() {
             </Sel>
           </div>
           <Btn onClick={calculate}>{raceFilter !== "" ? "Calculate Race" : eventFilter === "" ? "Calculate Season" : "Calculate Event"}</Btn>
+          <Btn onClick={setTireDefaults} disabled={filteredData.length === 0 || editingId != null}
+            title="Fill blank Tire on the rows shown with each driver's Entrant default tire">
+            Set Tire Defaults
+          </Btn>
           <Btn onClick={load}>Refresh</Btn>
         </div>
       </div>

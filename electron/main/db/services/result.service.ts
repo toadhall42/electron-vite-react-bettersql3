@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db-connect";
-import { results, drivers, events, sessions, seasons, pointModels } from "../schema";
+import { results, drivers, events, sessions, seasons, pointModels, entrants, vehicles } from "../schema";
 import {
   InsertResultModel,
   UpdateResultModel,
@@ -12,6 +12,8 @@ import type { Event } from "../schema/events";
 import type { Season } from "../schema/seasons";
 import type { PointModel } from "../schema/pointModels";
 import { ValidationError, NotFoundError, MissingStartError } from "../../utils/errors";
+
+export type SetTireDefaultsSummary = { updated: number; alreadySet: number; noDefault: number; ambiguous: number };
 
 const withDetails = () =>
   db
@@ -402,6 +404,46 @@ export class ResultService {
         summary.removed += s.removed;
       }
       throwIfMissingStarts(missing);
+      return summary;
+    });
+  }
+
+  // Fills a blank Tire on the given results with the driver's Entrant default tire.
+  // Results with a Tire already set are left alone. A driver with several Entrants is
+  // narrowed to the ones matching the result's class, then to active ones; if their
+  // default tires still differ the result is skipped rather than guessed.
+  static setTireDefaults(ids: number[]): SetTireDefaultsSummary {
+    const summary: SetTireDefaultsSummary = { updated: 0, alreadySet: 0, noDefault: 0, ambiguous: 0 };
+    if (ids.length === 0) return summary;
+    return db.transaction((tx) => {
+      const rows = tx.select().from(results).where(inArray(results.id, ids)).all();
+      const ents = tx
+        .select({
+          driverid: entrants.driverid,
+          tire: entrants.defaulttire,
+          active: entrants.active,
+          cls: sql<string | null>`coalesce(${vehicles.class}, ${entrants.carclass})`,
+        })
+        .from(entrants)
+        .leftJoin(vehicles, eq(entrants.vehicleid, vehicles.id))
+        .all();
+      const norm = (v: string | null | undefined) => (v ?? "").trim().toUpperCase();
+      const narrow = <T,>(list: T[], keep: (e: T) => boolean) => {
+        const kept = list.filter(keep);
+        return kept.length > 0 ? kept : list;
+      };
+
+      for (const r of rows) {
+        if ((r.tireBrand ?? "").trim() !== "") { summary.alreadySet++; continue; }
+        let cands = ents.filter((e) => e.driverid === r.driverId && e.tire.trim() !== "");
+        if (cands.length === 0) { summary.noDefault++; continue; }
+        cands = narrow(cands, (e) => norm(e.cls) === norm(r.carClass));
+        cands = narrow(cands, (e) => e.active === 1);
+        const tires = [...new Set(cands.map((e) => e.tire.trim()))];
+        if (tires.length > 1) { summary.ambiguous++; continue; }
+        tx.update(results).set({ tireBrand: tires[0] }).where(eq(results.id, r.id)).run();
+        summary.updated++;
+      }
       return summary;
     });
   }

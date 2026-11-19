@@ -31,8 +31,8 @@ const EMPTY_NEW = {
 };
 
 // id  session  tempF  windMph  precipIn  pressureInHg  cloudCoverPct  actions
-const GRID = "grid grid-cols-[160px_70px_75px_75px_105px_95px_155px] items-center px-4";
-const GRID_ID = "grid grid-cols-[44px_160px_70px_75px_75px_105px_95px_155px] items-center px-4";
+const GRID = "grid grid-cols-[160px_70px_75px_75px_105px_95px_210px] items-center px-4";
+const GRID_ID = "grid grid-cols-[44px_160px_70px_75px_75px_105px_95px_210px] items-center px-4";
 
 function numInp(
   editingId: number | null,
@@ -67,7 +67,7 @@ export function WeatherTablePage() {
   const [newRow, setNewRow] = useState({ ...EMPTY_NEW });
 
   async function load() {
-    setLoading(true);
+    // Loading state only on first mount; reloads keep rows mounted so scroll position is kept
     const [wxRes, sesRes] = await Promise.all([getAllWeather(), getAllSessions()]);
     setData((wxRes?.data as WeatherWithDetails[]) ?? EMPTY);
     setSessions((sesRes?.data as Session[]) ?? []);
@@ -102,9 +102,12 @@ export function WeatherTablePage() {
     await load();
   }
 
+  // Delete is offered only while editing: close the edit row, then refresh
   async function remove(id: number) {
     await deleteWeather(id);
-    load();
+    editRef.current = {};
+    setEditingId(null);
+    await load();
   }
 
   async function create() {
@@ -165,11 +168,11 @@ export function WeatherTablePage() {
               <div className="flex gap-1.5">
                 <Btn onClick={saveEdit}>Save</Btn>
                 <Btn onClick={cancelEdit}>Cancel</Btn>
+                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             ) : (
               <div className="flex gap-1.5">
                 <Btn onClick={() => startEdit(info.row.original)}>Edit</Btn>
-                <Btn danger onClick={() => remove(id)}>Delete</Btn>
               </div>
             );
           },
