@@ -18,6 +18,7 @@ import { Route as ResultTableRouteImport } from './routes/resultTable'
 import { Route as SeasonTableRouteImport } from './routes/seasonTable'
 import { Route as SessionImportRouteImport } from './routes/sessionImport'
 import { Route as SessionTableRouteImport } from './routes/sessionTable'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as VehicleTableRouteImport } from './routes/vehicleTable'
 import { Route as WeatherTableRouteImport } from './routes/weatherTable'
 
@@ -66,6 +67,11 @@ const SessionTableRoute = SessionTableRouteImport.update({
   path: '/sessionTable',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VehicleTableRoute = VehicleTableRouteImport.update({
   id: '/vehicleTable',
   path: '/vehicleTable',
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
   '/sessionTable': typeof SessionTableRoute
+  '/settings': typeof SettingsRoute
   '/vehicleTable': typeof VehicleTableRoute
   '/weatherTable': typeof WeatherTableRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
   '/sessionTable': typeof SessionTableRoute
+  '/settings': typeof SettingsRoute
   '/vehicleTable': typeof VehicleTableRoute
   '/weatherTable': typeof WeatherTableRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/seasonTable': typeof SeasonTableRoute
   '/sessionImport': typeof SessionImportRoute
   '/sessionTable': typeof SessionTableRoute
+  '/settings': typeof SettingsRoute
   '/vehicleTable': typeof VehicleTableRoute
   '/weatherTable': typeof WeatherTableRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionImport'
     | '/sessionTable'
+    | '/settings'
     | '/vehicleTable'
     | '/weatherTable'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionImport'
     | '/sessionTable'
+    | '/settings'
     | '/vehicleTable'
     | '/weatherTable'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/seasonTable'
     | '/sessionImport'
     | '/sessionTable'
+    | '/settings'
     | '/vehicleTable'
     | '/weatherTable'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   SeasonTableRoute: typeof SeasonTableRoute
   SessionImportRoute: typeof SessionImportRoute
   SessionTableRoute: typeof SessionTableRoute
+  SettingsRoute: typeof SettingsRoute
   VehicleTableRoute: typeof VehicleTableRoute
   WeatherTableRoute: typeof WeatherTableRoute
 }
@@ -238,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SessionTableRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vehicleTable': {
       id: '/vehicleTable'
       path: '/vehicleTable'
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   SeasonTableRoute: SeasonTableRoute,
   SessionImportRoute: SessionImportRoute,
   SessionTableRoute: SessionTableRoute,
+  SettingsRoute: SettingsRoute,
   VehicleTableRoute: VehicleTableRoute,
   WeatherTableRoute: WeatherTableRoute,
 }

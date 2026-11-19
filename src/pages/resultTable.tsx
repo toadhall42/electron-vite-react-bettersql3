@@ -15,6 +15,7 @@ import {
 import { getAllDrivers } from "@/lib/api/driver";
 import { getAllEvents } from "@/lib/api/event";
 import { getAllSeasons } from "@/lib/api/season";
+import { getAllPickListOptions } from "@/lib/api/pickListOption";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Driver,
@@ -24,6 +25,7 @@ import {
   type SeasonWithDetails,
   type InsertResult,
   type UpdateResult,
+  type PickListOption,
 } from "../../global.d";
 import { Btn } from "@/components/common/btn";
 import { Inp } from "@/components/common/input";
@@ -125,6 +127,35 @@ function numInp(
   );
 }
 
+// Drop-down of Settings-managed values; a stored value no longer in the list stays selectable
+function pickOptions(values: string[], current: string | null | undefined) {
+  const all = current && !values.includes(current) ? [current, ...values] : values;
+  return (
+    <>
+      <option value="">—</option>
+      {all.map((v) => <option key={v} value={v}>{v}</option>)}
+    </>
+  );
+}
+
+function pickSel(
+  key: string,
+  val: string | null | undefined,
+  field: string,
+  values: string[],
+  ref: React.MutableRefObject<Partial<Result>>
+) {
+  return (
+    <Sel
+      key={key}
+      defaultValue={val ?? ""}
+      onChange={(e) => { ref.current = { ...ref.current, [field]: e.target.value || null }; }}
+    >
+      {pickOptions(values, val)}
+    </Sel>
+  );
+}
+
 function txtInp(
   key: string,
   val: string | null | undefined,
@@ -146,6 +177,7 @@ export function ResultTablePage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [events, setEvents] = useState<EventWithDetails[]>([]);
   const [seasons, setSeasons] = useState<SeasonWithDetails[]>([]);
+  const [pickLists, setPickLists] = useState<{ carClass: string[]; tireBrand: string[] }>({ carClass: [], tireBrand: [] });
   const [seasonFilter, setSeasonFilter] = useState<number | "">("");
   const [eventFilter, setEventFilter] = useState<number | "">("");
   const [raceFilter, setRaceFilter] = useState("");
@@ -162,12 +194,18 @@ export function ResultTablePage() {
 
   async function load() {
     setLoading(true);
-    const [resRes, drvRes, evtRes, seaRes] = await Promise.all([
+    const [resRes, drvRes, evtRes, seaRes, pickRes] = await Promise.all([
       getAllResults(),
       getAllDrivers(),
       getAllEvents(),
       getAllSeasons(),
+      getAllPickListOptions(),
     ]);
+    const picks = (pickRes?.data as PickListOption[]) ?? [];
+    setPickLists({
+      carClass: picks.filter((o) => o.list === "carClass").map((o) => o.value),
+      tireBrand: picks.filter((o) => o.list === "tireBrand").map((o) => o.value),
+    });
     setData((resRes?.data as ResultWithDetails[]) ?? EMPTY);
     setDrivers((drvRes?.data as Driver[]) ?? []);
     setEvents((evtRes?.data as EventWithDetails[]) ?? []);
@@ -328,7 +366,7 @@ export function ResultTablePage() {
           header: () => <div className="pr-3">{classHeader()}</div>,
           cell: (info) =>
             editingId === info.row.original.id
-              ? <div className="pr-3">{txtInp(`carClass-${editingId}`, editRef.current.carClass, "carClass", editRef)}</div>
+              ? <div className="pr-3">{pickSel(`carClass-${editingId}`, editRef.current.carClass, "carClass", pickLists.carClass, editRef)}</div>
               : <span className="text-gray-500 text-xs block text-center pr-3">{info.getValue() ?? ""}</span>,
         }),
         col.accessor("positionOverall", {
@@ -404,7 +442,7 @@ export function ResultTablePage() {
           header: "Tire",
           cell: (info) =>
             editingId === info.row.original.id
-              ? txtInp(`tireBrand-${editingId}`, editRef.current.tireBrand, "tireBrand", editRef)
+              ? pickSel(`tireBrand-${editingId}`, editRef.current.tireBrand, "tireBrand", pickLists.tireBrand, editRef)
               : <span className="text-gray-500 text-xs">{info.getValue() ?? ""}</span>,
         }),
         col.accessor("classification", {
@@ -441,7 +479,7 @@ export function ResultTablePage() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debug, isBonusRace, editingId, drivers, events, classFilter, classOptions]
+    [debug, isBonusRace, editingId, drivers, events, classFilter, classOptions, pickLists]
   );
 
   const seasonEvents = useMemo(
@@ -794,8 +832,10 @@ export function ResultTablePage() {
               {debug && <Inp value={newRow.sessionId} placeholder="session"
                 onChange={(e) => setNewRow((v) => ({ ...v, sessionId: e.target.value }))} />}
               <div className="pr-3">
-                <Inp value={newRow.carClass} placeholder="class"
-                  onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))} />
+                <Sel value={newRow.carClass}
+                  onChange={(e) => setNewRow((v) => ({ ...v, carClass: e.target.value }))}>
+                  {pickOptions(pickLists.carClass, newRow.carClass)}
+                </Sel>
               </div>
               <Inp value={String(newRow.positionOverall)} placeholder="poa"
                 onChange={(e) => setNewRow((v) => ({ ...v, positionOverall: Number(e.target.value) }))} />
@@ -816,8 +856,10 @@ export function ResultTablePage() {
                 onChange={(e) => setNewRow((v) => ({ ...v, totalPoints: Number(e.target.value) }))} />
               {isBonusRace && <Inp value={String(newRow.bonusRacePoints)} placeholder="br"
                 onChange={(e) => setNewRow((v) => ({ ...v, bonusRacePoints: Number(e.target.value) }))} />}
-              <Inp value={newRow.tireBrand} placeholder="tire"
-                onChange={(e) => setNewRow((v) => ({ ...v, tireBrand: e.target.value }))} />
+              <Sel value={newRow.tireBrand}
+                onChange={(e) => setNewRow((v) => ({ ...v, tireBrand: e.target.value }))}>
+                {pickOptions(pickLists.tireBrand, newRow.tireBrand)}
+              </Sel>
               <Inp value={newRow.classification} placeholder="class'n"
                 onChange={(e) => setNewRow((v) => ({ ...v, classification: e.target.value }))} />
               <Inp value={newRow.comments} placeholder="comments"

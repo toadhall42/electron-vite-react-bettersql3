@@ -8,3 +8,4 @@ export * from "./session.handler";
 export * from "./weather.handler";
 export * from "./backup.handler";
 export * from "./pointModel.handler";
+export * from "./pickListOption.handler";

@@ -62,6 +62,13 @@ export type {
   WeatherWithDetails,
 } from "./electron/main/db/schema/weather";
 
+export type {
+  PickListOption,
+  InsertPickListOption,
+  UpdatePickListOption,
+  PickList,
+} from "./electron/main/db/schema/pickListOptions";
+
 export type QueryResponse<T = unknown> = {
   code: number;
   message: string;
